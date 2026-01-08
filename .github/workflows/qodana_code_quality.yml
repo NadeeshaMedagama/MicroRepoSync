@@ -1,15 +1,16 @@
 #-------------------------------------------------------------------------------#
-#            Discover all capabilities of Qodana in our documentation           #
+#            Qodana Community - Code Quality Analysis (No Cloud Required)      #
 #             https://www.jetbrains.com/help/qodana/about-qodana.html           #
 #-------------------------------------------------------------------------------#
 
-name: Qodana
+name: Qodana Code Quality
 on:
   workflow_dispatch:
   pull_request:
   push:
     branches:
-      - master
+      - main
+      - develop
 
 jobs:
   qodana:
@@ -19,21 +20,39 @@ jobs:
       pull-requests: write
       checks: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-      - name: 'Qodana Scan'
-        uses: JetBrains/qodana-action@v2025.3
-        env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
         with:
-          # When pr-mode is set to true, Qodana analyzes only the files that have been changed
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build project
+        run: mvn clean compile -DskipTests
+
+      - name: Qodana Scan (Community)
+        uses: JetBrains/qodana-action@v2025.3
+        with:
+          # Use Community linter - no token required
+          args: --linter,jetbrains/qodana-jvm-community:latest
           pr-mode: false
           use-caches: true
           post-pr-comment: true
           use-annotations: true
-          # Upload Qodana results (SARIF, other artifacts, logs) as an artifact to the job
-          upload-result: false
-          # quick-fixes available in Ultimate and Ultimate Plus plans
-          push-fixes: 'none'
+          upload-result: true
+          artifact-name: qodana-report
+          # No QODANA_TOKEN needed for Community version
+
+      - name: Upload Qodana results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qodana-results
+          path: ${{ runner.temp }}/qodana/results
+          retention-days: 30
