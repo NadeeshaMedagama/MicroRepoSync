@@ -1,0 +1,419 @@
+name: Release Management
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          
+          # Get the previous tag
+          PREV_TAG=$(git describe --abbrev=0 --tags `git rev-list --tags --skip=1 --max-count=1` 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, using initial commit"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            echo "Generating changelog from $PREV_TAG to $VERSION"
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+          
+          # Save changelog to file
+          cat > CHANGELOG.md << EOF
+          # Release $VERSION
+          
+          ## Changes
+          
+          $CHANGELOG
+          
+          ## Commits
+          
+          $(git log ${PREV_TAG}..HEAD --oneline --no-merges | head -20)
+          
+          Full Changelog: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${VERSION}
+          EOF
+          
+          cat CHANGELOG.md
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+
+  build-and-upload-artifacts:
+    name: Build and Upload Release Artifacts
+    needs: create-release
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service:
+          - github-service
+          - document-processor-service
+          - embedding-service
+          - milvus-service
+          - orchestrator-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build service
+        run: |
+          mvn clean package -DskipTests -pl ${{ matrix.service }} -am
+
+      - name: Create artifacts directory
+        run: mkdir -p release-artifacts
+
+      - name: Prepare release artifacts
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          SERVICE=${{ matrix.service }}
+          
+          # Copy JAR file
+          cp $SERVICE/target/*.jar release-artifacts/${SERVICE}-${VERSION}.jar
+          
+          # Create SHA256 checksum
+          cd release-artifacts
+          sha256sum ${SERVICE}-${VERSION}.jar > ${SERVICE}-${VERSION}.jar.sha256
+          
+          # Copy Dockerfile
+          cp ../$SERVICE/Dockerfile release-artifacts/${SERVICE}-Dockerfile
+          
+          # Create deployment instructions
+          cat > release-artifacts/${SERVICE}-DEPLOY.md << EOF
+          # Deployment Instructions for ${SERVICE}
+          
+          ## Version
+          ${VERSION}
+          
+          ## Quick Start
+          
+          ### Docker
+          \`\`\`bash
+          docker build -t ${SERVICE}:${VERSION} -f ${SERVICE}-Dockerfile .
+          docker run -p 808X:808X ${SERVICE}:${VERSION}
+          \`\`\`
+          
+          ### Java
+          \`\`\`bash
+          java -jar ${SERVICE}-${VERSION}.jar
+          \`\`\`
+          
+          ## Configuration
+          
+          See project README for environment variables and configuration details.
+          
+          ## Checksum Verification
+          \`\`\`bash
+          sha256sum -c ${SERVICE}-${VERSION}.jar.sha256
+          \`\`\`
+          EOF
+
+      - name: Upload JAR artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: release-artifacts/${{ matrix.service }}-${{ needs.create-release.outputs.version }}.jar
+          asset_name: ${{ matrix.service }}-${{ needs.create-release.outputs.version }}.jar
+          asset_content_type: application/java-archive
+
+      - name: Upload checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: release-artifacts/${{ matrix.service }}-${{ needs.create-release.outputs.version }}.jar.sha256
+          asset_name: ${{ matrix.service }}-${{ needs.create-release.outputs.version }}.jar.sha256
+          asset_content_type: text/plain
+
+      - name: Upload Dockerfile
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: release-artifacts/${{ matrix.service }}-Dockerfile
+          asset_name: ${{ matrix.service }}-Dockerfile
+          asset_content_type: text/plain
+
+      - name: Upload deployment instructions
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: release-artifacts/${{ matrix.service }}-DEPLOY.md
+          asset_name: ${{ matrix.service }}-DEPLOY.md
+          asset_content_type: text/markdown
+
+  build-docker-images:
+    name: Build and Push Docker Images
+    needs: create-release
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service:
+          - github-service
+          - document-processor-service
+          - embedding-service
+          - milvus-service
+          - orchestrator-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            reposync/${{ matrix.service }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.create-release.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.create-release.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.create-release.outputs.version }}
+            type=raw,value=latest
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests -pl ${{ matrix.service }} -am
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=registry,ref=reposync/${{ matrix.service }}:buildcache
+          cache-to: type=registry,ref=reposync/${{ matrix.service }}:buildcache,mode=max
+
+  create-release-notes:
+    name: Create Detailed Release Notes
+    needs: [create-release, build-and-upload-artifacts, build-docker-images]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate detailed release notes
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          
+          cat > RELEASE_NOTES.md << 'EOF'
+          # 🎉 RepoSync Microservices Release ${{ needs.create-release.outputs.version }}
+          
+          ## 📦 Artifacts
+          
+          This release includes the following artifacts:
+          
+          ### Java Archives (JAR)
+          - `github-service-${VERSION}.jar` + checksum
+          - `document-processor-service-${VERSION}.jar` + checksum
+          - `embedding-service-${VERSION}.jar` + checksum
+          - `milvus-service-${VERSION}.jar` + checksum
+          - `orchestrator-service-${VERSION}.jar` + checksum
+          
+          ### Docker Images
+          
+          **Docker Hub:**
+          ```bash
+          docker pull reposync/github-service:${VERSION}
+          docker pull reposync/document-processor-service:${VERSION}
+          docker pull reposync/embedding-service:${VERSION}
+          docker pull reposync/milvus-service:${VERSION}
+          docker pull reposync/orchestrator-service:${VERSION}
+          ```
+          
+          **GitHub Container Registry:**
+          ```bash
+          docker pull ghcr.io/${{ github.repository_owner }}/github-service:${VERSION}
+          docker pull ghcr.io/${{ github.repository_owner }}/document-processor-service:${VERSION}
+          docker pull ghcr.io/${{ github.repository_owner }}/embedding-service:${VERSION}
+          docker pull ghcr.io/${{ github.repository_owner }}/milvus-service:${VERSION}
+          docker pull ghcr.io/${{ github.repository_owner }}/orchestrator-service:${VERSION}
+          ```
+          
+          ### Deployment Files
+          - Dockerfiles for each service
+          - Deployment instructions (DEPLOY.md files)
+          
+          ## 🚀 Quick Start
+          
+          ### Using Docker Compose
+          ```bash
+          wget https://github.com/${{ github.repository }}/releases/download/${VERSION}/docker-compose.yml
+          docker-compose up -d
+          ```
+          
+          ### Using Kubernetes
+          ```bash
+          kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${VERSION}/k8s-manifests.yaml
+          ```
+          
+          ### Using Google Cloud Run
+          See [deployment guide](https://github.com/${{ github.repository }}/blob/main/docs/readmes/DEPLOYMENT.md)
+          
+          ## 📊 What's Included
+          
+          - ✅ GitHub Service - Repository synchronization
+          - ✅ Document Processor Service - Document chunking and processing
+          - ✅ Embedding Service - Azure OpenAI embeddings generation
+          - ✅ Milvus Service - Vector database operations
+          - ✅ Orchestrator Service - Workflow coordination
+          
+          ## 🔒 Security
+          
+          All artifacts have been:
+          - ✅ Scanned with Trivy
+          - ✅ Checked with OWASP Dependency Check
+          - ✅ Built with Java 21
+          - ✅ Signed with SHA256 checksums
+          
+          ## 📝 Documentation
+          
+          - [Full Documentation](https://github.com/${{ github.repository }}/blob/main/README.md)
+          - [Setup Guide](https://github.com/${{ github.repository }}/blob/main/docs/readmes/LOCAL_SETUP_GUIDE.md)
+          - [Deployment Guide](https://github.com/${{ github.repository }}/blob/main/docs/readmes/DEPLOYMENT.md)
+          
+          ## 🐛 Bug Reports
+          
+          Found a bug? [Create an issue](https://github.com/${{ github.repository }}/issues/new)
+          
+          ## 💬 Support
+          
+          Need help? Check our [documentation](https://github.com/${{ github.repository }}/tree/main/docs) or open an issue.
+          
+          ---
+          
+          **Built with ❤️ by the RepoSync Team**
+          EOF
+          
+          cat RELEASE_NOTES.md
+
+      - name: Update release with detailed notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const releaseNotes = fs.readFileSync('RELEASE_NOTES.md', 'utf8');
+            
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            
+            const release = releases.data.find(r => r.tag_name === '${{ needs.create-release.outputs.version }}');
+            
+            if (release) {
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id,
+                body: releaseNotes
+              });
+            }
+
+  notify-release:
+    name: Notify Release
+    needs: [create-release, create-release-notes]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create release announcement
+        run: |
+          echo "# 🎉 New Release: ${{ needs.create-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Release published successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release URL**: https://github.com/${{ github.repository }}/releases/tag/${{ needs.create-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts Published" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ 5 JAR files with checksums" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ 5 Docker images (Docker Hub + GHCR)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Dockerfiles and deployment instructions" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Release notes and changelog" >> $GITHUB_STEP_SUMMARY
+
