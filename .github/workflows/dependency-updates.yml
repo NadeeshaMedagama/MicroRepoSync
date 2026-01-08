@@ -1,0 +1,292 @@
+name: Dependency Updates & Security Checks
+
+on:
+  schedule:
+    # Runs every Monday at 9:00 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:  # Allows manual triggering
+  pull_request:
+    paths:
+      - '**/pom.xml'
+      - 'pom.xml'
+
+jobs:
+  dependency-check:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run OWASP Dependency Check
+        run: |
+          mvn org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=7 \
+            -DsuppressionFiles=dependency-check-suppressions.xml \
+            || true
+
+      - name: Upload OWASP Dependency Check Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-dependency-check-report
+          path: '**/target/dependency-check-report.html'
+          retention-days: 30
+
+      - name: Check for outdated dependencies
+        run: |
+          mvn versions:display-dependency-updates > dependency-updates.txt
+          mvn versions:display-plugin-updates >> dependency-updates.txt
+          cat dependency-updates.txt
+
+      - name: Upload dependency updates report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-updates-report
+          path: dependency-updates.txt
+          retention-days: 30
+
+  maven-dependency-tree:
+    name: Generate Dependency Tree
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Generate dependency tree
+        run: |
+          mvn dependency:tree > dependency-tree.txt
+          cat dependency-tree.txt
+
+      - name: Upload dependency tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-tree
+          path: dependency-tree.txt
+          retention-days: 30
+
+  security-audit:
+    name: Security Vulnerability Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build project
+        run: mvn clean install -DskipTests
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Upload Trivy results as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-security-report
+          path: trivy-results.sarif
+          retention-days: 30
+
+  license-check:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Check licenses
+        run: |
+          mvn license:add-third-party
+          mvn license:download-licenses || true
+
+      - name: Generate license report
+        run: |
+          find . -name "THIRD-PARTY.txt" -exec cat {} \; > all-licenses.txt
+          cat all-licenses.txt
+
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: all-licenses.txt
+          retention-days: 30
+
+  create-update-pr:
+    name: Create Dependency Update PR
+    runs-on: ubuntu-latest
+    needs: [dependency-check, security-audit]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Update dependencies
+        run: |
+          # Update parent and plugin versions
+          mvn versions:update-parent -DallowSnapshots=false -DgenerateBackupPoms=false
+          mvn versions:update-properties -DallowSnapshots=false -DgenerateBackupPoms=false
+          mvn versions:use-latest-releases -DallowSnapshots=false -DgenerateBackupPoms=false
+
+      - name: Build and test with updated dependencies
+        id: build_test
+        run: |
+          mvn clean install
+        continue-on-error: true
+
+      - name: Create Pull Request
+        if: steps.build_test.outcome == 'success'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update dependencies to latest versions'
+          title: '🔄 Weekly Dependency Updates'
+          body: |
+            ## 📦 Automated Dependency Updates
+            
+            This PR updates project dependencies to their latest stable versions.
+            
+            ### Changes
+            - Updated Maven parent versions
+            - Updated dependency versions
+            - Updated plugin versions
+            
+            ### Testing
+            ✅ Build successful
+            ✅ All tests passing
+            
+            ### Security
+            - OWASP Dependency Check: See artifacts
+            - Trivy Security Scan: See artifacts
+            
+            ### Review Checklist
+            - [ ] Review dependency changes
+            - [ ] Check for breaking changes
+            - [ ] Verify all services start correctly
+            - [ ] Run integration tests
+            
+            **Auto-generated by Dependency Updates workflow**
+          branch: dependency-updates/weekly-${{ github.run_number }}
+          delete-branch: true
+          labels: |
+            dependencies
+            automated
+            security
+
+      - name: Comment on failure
+        if: steps.build_test.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '⚠️ Dependency Update Failed',
+              body: `## Dependency Update Failed
+              
+              The automated dependency update for week ${{ github.run_number }} failed during build/test.
+              
+              **Action Required:** Manual review needed
+              
+              Check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`,
+              labels: ['dependencies', 'bug', 'needs-investigation']
+            })
+
+  renovate-config:
+    name: Validate Renovate Configuration
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Renovate config
+        uses: rinchsan/renovate-config-validator@v0.1.0
+        if: hashFiles('.github/renovate.json') != ''
+        with:
+          pattern: '.github/renovate.json'
+
+  summary:
+    name: Generate Security Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-check, security-audit, license-check]
+    if: always()
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Generate summary
+        run: |
+          echo "# 🔒 Dependency & Security Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Workflow Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dependency Check**: ${{ needs.dependency-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Security Audit**: ${{ needs.security-audit.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **License Check**: ${{ needs.license-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Reports Generated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- OWASP Dependency Check Report" >> $GITHUB_STEP_SUMMARY
+          echo "- Trivy Security Scan Report" >> $GITHUB_STEP_SUMMARY
+          echo "- License Compliance Report" >> $GITHUB_STEP_SUMMARY
+          echo "- Dependency Tree Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 Download artifacts from the workflow run page." >> $GITHUB_STEP_SUMMARY
+
