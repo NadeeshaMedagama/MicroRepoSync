@@ -1,0 +1,190 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+
+jobs:
+  deploy:
+    name: Deploy Services to Cloud Run
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service:
+          - name: github-service
+            port: 8081
+          - name: document-processor-service
+            port: 8082
+          - name: embedding-service
+            port: 8083
+          - name: milvus-service
+            port: 8084
+          - name: orchestrator-service
+            port: 8080
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests -pl ${{ matrix.service.name }} -am
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t gcr.io/$PROJECT_ID/${{ matrix.service.name }}:$GITHUB_SHA \
+                       -t gcr.io/$PROJECT_ID/${{ matrix.service.name }}:latest \
+                       -f ${{ matrix.service.name }}/Dockerfile .
+          docker push gcr.io/$PROJECT_ID/${{ matrix.service.name }}:$GITHUB_SHA
+          docker push gcr.io/$PROJECT_ID/${{ matrix.service.name }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ matrix.service.name }} \
+            --image gcr.io/$PROJECT_ID/${{ matrix.service.name }}:$GITHUB_SHA \
+            --platform managed \
+            --region $REGION \
+            --allow-unauthenticated \
+            --port ${{ matrix.service.port }} \
+            --set-env-vars="REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}" \
+            --set-env-vars="REPOSYNC_ORGANIZATION=${{ secrets.REPOSYNC_ORGANIZATION }}" \
+            --set-env-vars="REPOSYNC_FILTER_KEYWORD=${{ secrets.REPOSYNC_FILTER_KEYWORD }}" \
+            --set-env-vars="AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" \
+            --set-env-vars="AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+            --set-env-vars="AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}" \
+            --set-env-vars="MILVUS_URI=${{ secrets.MILVUS_URI }}" \
+            --set-env-vars="MILVUS_TOKEN=${{ secrets.MILVUS_TOKEN }}" \
+            --set-env-vars="MILVUS_COLLECTION_NAME=${{ secrets.MILVUS_COLLECTION_NAME }}" \
+            --memory 2Gi \
+            --cpu 2 \
+            --min-instances 0 \
+            --max-instances 10 \
+            --timeout 300
+
+      - name: Get service URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ matrix.service.name }} \
+            --platform managed \
+            --region $REGION \
+            --format 'value(status.url)')
+          echo "Service URL: $SERVICE_URL"
+          echo "${{ matrix.service.name }}_url=$SERVICE_URL" >> $GITHUB_OUTPUT
+
+  update-service-urls:
+    name: Update Service URLs
+    needs: deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get all service URLs
+        id: urls
+        run: |
+          GITHUB_URL=$(gcloud run services describe github-service --platform managed --region $REGION --format 'value(status.url)')
+          PROCESSOR_URL=$(gcloud run services describe document-processor-service --platform managed --region $REGION --format 'value(status.url)')
+          EMBEDDING_URL=$(gcloud run services describe embedding-service --platform managed --region $REGION --format 'value(status.url)')
+          MILVUS_URL=$(gcloud run services describe milvus-service --platform managed --region $REGION --format 'value(status.url)')
+          ORCHESTRATOR_URL=$(gcloud run services describe orchestrator-service --platform managed --region $REGION --format 'value(status.url)')
+          
+          echo "github_url=$GITHUB_URL" >> $GITHUB_OUTPUT
+          echo "processor_url=$PROCESSOR_URL" >> $GITHUB_OUTPUT
+          echo "embedding_url=$EMBEDDING_URL" >> $GITHUB_OUTPUT
+          echo "milvus_url=$MILVUS_URL" >> $GITHUB_OUTPUT
+          echo "orchestrator_url=$ORCHESTRATOR_URL" >> $GITHUB_OUTPUT
+
+      - name: Update orchestrator service with URLs
+        run: |
+          gcloud run services update orchestrator-service \
+            --platform managed \
+            --region $REGION \
+            --update-env-vars="GITHUB_SERVICE_URL=${{ steps.urls.outputs.github_url }}" \
+            --update-env-vars="PROCESSOR_SERVICE_URL=${{ steps.urls.outputs.processor_url }}" \
+            --update-env-vars="EMBEDDING_SERVICE_URL=${{ steps.urls.outputs.embedding_url }}" \
+            --update-env-vars="MILVUS_SERVICE_URL=${{ steps.urls.outputs.milvus_url }}"
+
+  health-check:
+    name: Health Check
+    needs: update-service-urls
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Check service health
+        run: |
+          for service in github-service document-processor-service embedding-service milvus-service orchestrator-service; do
+            URL=$(gcloud run services describe $service --platform managed --region $REGION --format 'value(status.url)')
+            echo "Checking health of $service at $URL"
+            
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" $URL/actuator/health || echo "000")
+            
+            if [ "$RESPONSE" = "200" ]; then
+              echo "✅ $service is healthy"
+            else
+              echo "⚠️ $service returned status code $RESPONSE"
+            fi
+          done
+
+  summary:
+    name: Deployment Summary
+    needs: health-check
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Generate deployment summary
+        run: |
+          echo "# 🚀 Cloud Run Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Project ID**: $PROJECT_ID" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: $REGION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: $GITHUB_SHA" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Services Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- GitHub Service" >> $GITHUB_STEP_SUMMARY
+          echo "- Document Processor Service" >> $GITHUB_STEP_SUMMARY
+          echo "- Embedding Service" >> $GITHUB_STEP_SUMMARY
+          echo "- Milvus Service" >> $GITHUB_STEP_SUMMARY
+          echo "- Orchestrator Service" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View services: https://console.cloud.google.com/run?project=$PROJECT_ID" >> $GITHUB_STEP_SUMMARY
+
