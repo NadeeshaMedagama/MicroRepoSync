@@ -1,0 +1,28 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: embedding-service
+
+azure:
+  openai:
+    endpoint: ${AZURE_OPENAI_ENDPOINT}
+    api-key: ${AZURE_OPENAI_API_KEY}
+    embeddings-deployment: ${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}
+    batch-size: 16
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.reposync.embedding: INFO
+    org.springframework.web: INFO
+
