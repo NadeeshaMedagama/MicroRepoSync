@@ -1,0 +1,136 @@
+name: Daily RepoSync
+
+on:
+  schedule:
+    # Runs at 8:00 AM UTC every day
+    - cron: '0 8 * * *'
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  sync:
+    name: Execute RepoSync Workflow
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build all services
+        run: mvn clean package -DskipTests
+
+      - name: Set up environment variables
+        run: |
+          echo "REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}" >> $GITHUB_ENV
+          echo "REPOSYNC_ORGANIZATION=${{ secrets.REPOSYNC_ORGANIZATION }}" >> $GITHUB_ENV
+          echo "REPOSYNC_FILTER_KEYWORD=${{ secrets.REPOSYNC_FILTER_KEYWORD }}" >> $GITHUB_ENV
+          echo "AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" >> $GITHUB_ENV
+          echo "AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" >> $GITHUB_ENV
+          echo "AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}" >> $GITHUB_ENV
+          echo "MILVUS_URI=${{ secrets.MILVUS_URI }}" >> $GITHUB_ENV
+          echo "MILVUS_TOKEN=${{ secrets.MILVUS_TOKEN }}" >> $GITHUB_ENV
+          echo "MILVUS_COLLECTION_NAME=${{ secrets.MILVUS_COLLECTION_NAME }}" >> $GITHUB_ENV
+
+      - name: Start GitHub Service
+        run: |
+          cd github-service
+          nohup java -jar target/*.jar > github-service.log 2>&1 &
+          echo $! > github-service.pid
+          sleep 30
+        env:
+          REPOSYNC_GITHUB_TOKEN: ${{ secrets.REPOSYNC_GITHUB_TOKEN }}
+
+      - name: Start Document Processor Service
+        run: |
+          cd document-processor-service
+          nohup java -jar target/*.jar > processor-service.log 2>&1 &
+          echo $! > processor-service.pid
+          sleep 20
+
+      - name: Start Embedding Service
+        run: |
+          cd embedding-service
+          nohup java -jar target/*.jar > embedding-service.log 2>&1 &
+          echo $! > embedding-service.pid
+          sleep 30
+        env:
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
+
+      - name: Start Milvus Service
+        run: |
+          cd milvus-service
+          nohup java -jar target/*.jar > milvus-service.log 2>&1 &
+          echo $! > milvus-service.pid
+          sleep 30
+        env:
+          MILVUS_URI: ${{ secrets.MILVUS_URI }}
+          MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
+          MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
+
+      - name: Start Orchestrator Service and Execute Sync
+        run: |
+          cd orchestrator-service
+          nohup java -jar target/*.jar > orchestrator-service.log 2>&1 &
+          echo $! > orchestrator-service.pid
+          sleep 60
+        env:
+          REPOSYNC_ORGANIZATION: ${{ secrets.REPOSYNC_ORGANIZATION }}
+          REPOSYNC_FILTER_KEYWORD: ${{ secrets.REPOSYNC_FILTER_KEYWORD }}
+          MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
+          GITHUB_SERVICE_URL: "http://localhost:8081"
+          PROCESSOR_SERVICE_URL: "http://localhost:8082"
+          EMBEDDING_SERVICE_URL: "http://localhost:8083"
+          MILVUS_SERVICE_URL: "http://localhost:8084"
+
+      - name: Trigger Sync Job
+        run: |
+          sleep 30
+          curl -X POST http://localhost:8080/api/orchestrator/sync \
+            -H "Content-Type: application/json" \
+            -o sync-result.json
+          cat sync-result.json
+
+      - name: Check Sync Status
+        run: |
+          if [ -f sync-result.json ]; then
+            STATUS=$(jq -r '.status' sync-result.json)
+            if [ "$STATUS" != "SUCCESS" ]; then
+              echo "Sync failed with status: $STATUS"
+              exit 1
+            fi
+            echo "Sync completed successfully!"
+            echo "Repositories processed: $(jq -r '.repositoriesProcessed' sync-result.json)"
+            echo "Documents processed: $(jq -r '.documentsProcessed' sync-result.json)"
+            echo "Chunks created: $(jq -r '.chunksCreated' sync-result.json)"
+            echo "Vectors stored: $(jq -r '.vectorsStored' sync-result.json)"
+          else
+            echo "Sync result not found"
+            exit 1
+          fi
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-logs
+          path: |
+            *-service/*.log
+            sync-result.json
+
+      - name: Cleanup
+        if: always()
+        run: |
+          for service in github-service document-processor-service embedding-service milvus-service orchestrator-service; do
+            if [ -f $service/$service.pid ]; then
+              kill $(cat $service/$service.pid) || true
+            fi
+          done
+
