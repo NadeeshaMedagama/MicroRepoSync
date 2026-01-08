@@ -1,0 +1,274 @@
+name: PR Preview Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [ main, develop ]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+
+jobs:
+  deploy-preview:
+    name: Deploy Preview Environment
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+
+      - name: Set preview environment name
+        id: preview-name
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          PREVIEW_NAME="pr-${PR_NUMBER}"
+          echo "preview_name=$PREVIEW_NAME" >> $GITHUB_OUTPUT
+          echo "Preview environment: $PREVIEW_NAME"
+
+      - name: Build and push preview images
+        run: |
+          PREVIEW_NAME=${{ steps.preview-name.outputs.preview_name }}
+          
+          for service in github-service document-processor-service embedding-service milvus-service orchestrator-service; do
+            echo "Building preview image for $service..."
+            docker build -t gcr.io/$PROJECT_ID/$service:$PREVIEW_NAME \
+                         -f $service/Dockerfile .
+            docker push gcr.io/$PROJECT_ID/$service:$PREVIEW_NAME
+          done
+
+      - name: Deploy Orchestrator to Cloud Run (Preview)
+        id: deploy-orchestrator
+        run: |
+          PREVIEW_NAME=${{ steps.preview-name.outputs.preview_name }}
+          
+          gcloud run deploy orchestrator-$PREVIEW_NAME \
+            --image gcr.io/$PROJECT_ID/orchestrator-service:$PREVIEW_NAME \
+            --platform managed \
+            --region $REGION \
+            --allow-unauthenticated \
+            --port 8080 \
+            --set-env-vars="REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}" \
+            --set-env-vars="REPOSYNC_ORGANIZATION=${{ secrets.REPOSYNC_ORGANIZATION }}" \
+            --set-env-vars="REPOSYNC_FILTER_KEYWORD=${{ secrets.REPOSYNC_FILTER_KEYWORD }}" \
+            --set-env-vars="AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" \
+            --set-env-vars="AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+            --set-env-vars="AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}" \
+            --set-env-vars="MILVUS_URI=${{ secrets.MILVUS_URI }}" \
+            --set-env-vars="MILVUS_TOKEN=${{ secrets.MILVUS_TOKEN }}" \
+            --set-env-vars="MILVUS_COLLECTION_NAME=${{ secrets.MILVUS_COLLECTION_NAME }}" \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --timeout 300 \
+            --tag pr-${{ github.event.pull_request.number }}
+          
+          ORCHESTRATOR_URL=$(gcloud run services describe orchestrator-$PREVIEW_NAME \
+            --platform managed \
+            --region $REGION \
+            --format 'value(status.url)')
+          
+          echo "orchestrator_url=$ORCHESTRATOR_URL" >> $GITHUB_OUTPUT
+
+      - name: Deploy supporting services (Preview)
+        run: |
+          PREVIEW_NAME=${{ steps.preview-name.outputs.preview_name }}
+          
+          # GitHub Service
+          gcloud run deploy github-service-$PREVIEW_NAME \
+            --image gcr.io/$PROJECT_ID/github-service:$PREVIEW_NAME \
+            --platform managed \
+            --region $REGION \
+            --allow-unauthenticated \
+            --port 8081 \
+            --set-env-vars="REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}" \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --timeout 60 \
+            --tag pr-${{ github.event.pull_request.number }}
+          
+          # Document Processor Service
+          gcloud run deploy document-processor-$PREVIEW_NAME \
+            --image gcr.io/$PROJECT_ID/document-processor-service:$PREVIEW_NAME \
+            --platform managed \
+            --region $REGION \
+            --allow-unauthenticated \
+            --port 8082 \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --timeout 60 \
+            --tag pr-${{ github.event.pull_request.number }}
+          
+          # Embedding Service
+          gcloud run deploy embedding-service-$PREVIEW_NAME \
+            --image gcr.io/$PROJECT_ID/embedding-service:$PREVIEW_NAME \
+            --platform managed \
+            --region $REGION \
+            --allow-unauthenticated \
+            --port 8083 \
+            --set-env-vars="AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" \
+            --set-env-vars="AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --timeout 60 \
+            --tag pr-${{ github.event.pull_request.number }}
+          
+          # Milvus Service
+          gcloud run deploy milvus-service-$PREVIEW_NAME \
+            --image gcr.io/$PROJECT_ID/milvus-service:$PREVIEW_NAME \
+            --platform managed \
+            --region $REGION \
+            --allow-unauthenticated \
+            --port 8084 \
+            --set-env-vars="MILVUS_URI=${{ secrets.MILVUS_URI }}" \
+            --set-env-vars="MILVUS_TOKEN=${{ secrets.MILVUS_TOKEN }}" \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --timeout 60 \
+            --tag pr-${{ github.event.pull_request.number }}
+
+      - name: Comment on PR with preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const previewUrl = '${{ steps.deploy-orchestrator.outputs.orchestrator_url }}';
+            const previewName = '${{ steps.preview-name.outputs.preview_name }}';
+            
+            const comment = `## 🚀 Preview Environment Deployed!
+            
+            Your preview environment is ready:
+            
+            **Preview URL**: ${previewUrl}
+            **Environment**: \`${previewName}\`
+            **Commit**: ${context.sha.substring(0, 7)}
+            
+            ### 🔗 Service Endpoints
+            
+            - **Orchestrator**: ${previewUrl}
+            - **Health Check**: ${previewUrl}/actuator/health
+            
+            ### 📊 Preview Environment Details
+            
+            - **Region**: ${process.env.REGION}
+            - **Auto-scaling**: 0-2 instances
+            - **Memory**: 512Mi-1Gi per service
+            - **Timeout**: 60-300 seconds
+            
+            > ℹ️ This preview environment will be automatically deleted when the PR is closed or merged.
+            
+            ---
+            
+            *Preview deployed by [PR Preview Workflow](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})*`;
+            
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment
+            });
+
+  cleanup-preview:
+    name: Cleanup Preview Environment
+    runs-on: ubuntu-latest
+    if: github.event.action == 'closed'
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set preview environment name
+        id: preview-name
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          PREVIEW_NAME="pr-${PR_NUMBER}"
+          echo "preview_name=$PREVIEW_NAME" >> $GITHUB_OUTPUT
+
+      - name: Delete preview services
+        run: |
+          PREVIEW_NAME=${{ steps.preview-name.outputs.preview_name }}
+          
+          for service in orchestrator github-service document-processor embedding-service milvus-service; do
+            SERVICE_NAME="${service}-${PREVIEW_NAME}"
+            
+            echo "Checking if $SERVICE_NAME exists..."
+            if gcloud run services describe $SERVICE_NAME --platform managed --region $REGION >/dev/null 2>&1; then
+              echo "Deleting $SERVICE_NAME..."
+              gcloud run services delete $SERVICE_NAME \
+                --platform managed \
+                --region $REGION \
+                --quiet
+            else
+              echo "$SERVICE_NAME does not exist, skipping..."
+            fi
+          done
+
+      - name: Delete preview images
+        run: |
+          PREVIEW_NAME=${{ steps.preview-name.outputs.preview_name }}
+          
+          for service in orchestrator-service github-service document-processor-service embedding-service milvus-service; do
+            echo "Deleting preview image for $service..."
+            gcloud container images delete gcr.io/$PROJECT_ID/$service:$PREVIEW_NAME --quiet || true
+          done
+
+      - name: Comment on PR about cleanup
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const previewName = '${{ steps.preview-name.outputs.preview_name }}';
+            
+            const comment = `## 🧹 Preview Environment Cleaned Up
+            
+            The preview environment \`${previewName}\` has been deleted.
+            
+            All Cloud Run services and container images have been removed.
+            
+            ---
+            
+            *Cleanup performed by [PR Preview Workflow](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})*`;
+            
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment
+            });
+
