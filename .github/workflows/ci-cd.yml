@@ -1,0 +1,156 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn clean install
+
+      - name: Run tests
+        run: mvn test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/target/surefire-reports/*.xml'
+
+  build-docker-images:
+    name: Build Docker Images
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    strategy:
+      matrix:
+        service:
+          - github-service
+          - document-processor-service
+          - embedding-service
+          - milvus-service
+          - orchestrator-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: reposync/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=reposync/${{ matrix.service }}:buildcache
+          cache-to: type=registry,ref=reposync/${{ matrix.service }}:buildcache,mode=max
+
+  deploy-to-kubernetes:
+    name: Deploy to Kubernetes
+    needs: build-docker-images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Update Kubernetes secrets
+        run: |
+          kubectl create secret generic reposync-secrets \
+            --from-literal=REPOSYNC_GITHUB_TOKEN="${{ secrets.REPOSYNC_GITHUB_TOKEN }}" \
+            --from-literal=AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
+            --from-literal=MILVUS_TOKEN="${{ secrets.MILVUS_TOKEN }}" \
+            --namespace=reposync \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Update Kubernetes ConfigMap
+        run: |
+          kubectl create configmap reposync-config \
+            --from-literal=REPOSYNC_ORGANIZATION="${{ secrets.REPOSYNC_ORGANIZATION }}" \
+            --from-literal=REPOSYNC_FILTER_KEYWORD="${{ secrets.REPOSYNC_FILTER_KEYWORD }}" \
+            --from-literal=AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+            --from-literal=AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT="${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}" \
+            --from-literal=MILVUS_URI="${{ secrets.MILVUS_URI }}" \
+            --from-literal=MILVUS_COLLECTION_NAME="${{ secrets.MILVUS_COLLECTION_NAME }}" \
+            --from-literal=GITHUB_SERVICE_URL="http://github-service:8081" \
+            --from-literal=PROCESSOR_SERVICE_URL="http://document-processor-service:8082" \
+            --from-literal=EMBEDDING_SERVICE_URL="http://embedding-service:8083" \
+            --from-literal=MILVUS_SERVICE_URL="http://milvus-service:8084" \
+            --namespace=reposync \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/01-namespace-config.yaml
+          kubectl apply -f k8s/02-github-service.yaml
+          kubectl apply -f k8s/03-document-processor-service.yaml
+          kubectl apply -f k8s/04-embedding-service.yaml
+          kubectl apply -f k8s/05-milvus-service.yaml
+          kubectl apply -f k8s/06-orchestrator-service.yaml
+
+      - name: Wait for deployments
+        run: |
+          kubectl rollout status deployment/github-service -n reposync --timeout=5m
+          kubectl rollout status deployment/document-processor-service -n reposync --timeout=5m
+          kubectl rollout status deployment/embedding-service -n reposync --timeout=5m
+          kubectl rollout status deployment/milvus-service -n reposync --timeout=5m
+          kubectl rollout status deployment/orchestrator-service -n reposync --timeout=5m
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n reposync
+          kubectl get services -n reposync
+
