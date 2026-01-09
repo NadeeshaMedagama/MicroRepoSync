@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!--
+        Suppression file for OWASP Dependency Check
+        Use this file to suppress false positives or known issues that are not applicable
+
+        To suppress a CVE:
+        <suppress>
+            <notes><![CDATA[
+            Reason for suppression
+            ]]></notes>
+            <cve>CVE-YYYY-NNNN</cve>
+        </suppress>
+
+        To suppress by file name pattern:
+        <suppress>
+            <notes><![CDATA[
+            Reason for suppression
+            ]]></notes>
+            <filePath regex="true">.*dependency-name.*\.jar</filePath>
+        </suppress>
+    -->
+
+    <!-- Example suppressions - Remove or modify as needed -->
+
+    <!--
+    <suppress>
+        <notes><![CDATA[
+        This is a development-only dependency and does not affect production security
+        ]]></notes>
+        <gav regex="true">^org\.springframework\.boot:spring-boot-devtools:.*$</gav>
+    </suppress>
+    -->
+
+</suppressions>
+
