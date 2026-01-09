@@ -534,6 +534,230 @@ mvn spring-boot:run
 curl -X POST http://localhost:8080/api/orchestrator/sync
 ```
 
+---
+
+## 3. Dependency Updates Pipeline (`dependency-updates.yml`)
+
+**Location:** `.github/workflows/dependency-updates.yml`
+
+### Purpose
+Automates weekly dependency updates and comprehensive security scanning to keep the project secure and up-to-date.
+
+### Trigger Events
+- **Scheduled**: Every Monday at 9:00 AM UTC
+- **Manual**: Via GitHub Actions UI (workflow_dispatch)
+- **Pull Request**: When any `pom.xml` file is modified (validation only)
+
+### Pipeline Jobs
+
+#### Job 1: Dependency Security Scan
+**Job Name:** `dependency-check`
+
+**What it does:**
+- ✅ Runs OWASP Dependency Check for CVE scanning
+- ✅ Checks for outdated dependencies
+- ✅ Generates vulnerability reports
+- ✅ Uploads reports as artifacts (30-day retention)
+
+**Reports Generated:**
+- OWASP Dependency Check Report (HTML format)
+- Dependency Updates List (TXT format)
+
+**Failure Threshold:** CVSS score ≥ 7
+
+---
+
+#### Job 2: Dependency Tree Analysis
+**Job Name:** `maven-dependency-tree`
+
+**What it does:**
+- ✅ Generates complete Maven dependency tree
+- ✅ Helps identify transitive dependencies
+- ✅ Useful for debugging dependency conflicts
+
+**Output:** Dependency tree artifact (TXT format)
+
+---
+
+#### Job 3: Security Vulnerability Audit
+**Job Name:** `security-audit`
+
+**What it does:**
+- ✅ Runs Trivy vulnerability scanner
+- ✅ Scans for HIGH, MEDIUM, and CRITICAL vulnerabilities
+- ✅ Uploads results to GitHub Security tab (SARIF format)
+- ✅ Creates security alerts in GitHub Advanced Security
+
+**Integration:** Results appear in repository's Security tab
+
+---
+
+#### Job 4: License Compliance Check
+**Job Name:** `license-check`
+
+**What it does:**
+- ✅ Scans all dependencies for license information
+- ✅ Generates third-party license report
+- ✅ Helps ensure license compliance
+
+**Output:** All licenses report (TXT format)
+
+---
+
+#### Job 5: Create Dependency Update PR
+**Job Name:** `create-update-pr`
+
+**Dependencies:** Requires `dependency-check` and `security-audit` to pass
+
+**What it does:**
+- ✅ Updates dependencies to latest stable versions
+- ✅ Builds and tests with updated dependencies
+- ✅ Creates Pull Request if successful
+- ✅ Creates GitHub Issue if updates fail
+
+**Runs on:** Only scheduled or manual triggers (not on PRs)
+
+**PR Details:**
+- Title: "🔄 Weekly Dependency Updates"
+- Branch: `dependency-updates/weekly-{run_number}`
+- Labels: `dependencies`, `automated`, `security`
+- Includes: Test results, security reports, review checklist
+
+**On Failure:** Creates issue titled "⚠️ Dependency Update Failed" with details
+
+---
+
+#### Job 6: Generate Security Summary
+**Job Name:** `summary`
+
+**Dependencies:** Runs after all other jobs complete
+
+**What it does:**
+- ✅ Aggregates results from all jobs
+- ✅ Creates GitHub Actions Summary with status
+- ✅ Lists all generated reports
+
+**Always runs** regardless of other job outcomes
+
+---
+
+### Renovate Bot Integration
+
+**Configuration:** `.github/renovate.json`
+
+**Features:**
+- 🔄 Intelligent dependency grouping (Spring Boot, Azure SDK, Maven plugins, etc.)
+- 📅 Scheduled updates (Mondays before 10 AM)
+- 🔒 Security updates processed immediately
+- ✅ Minimum release age for stability (3 days)
+- 📊 Dependency Dashboard in GitHub Issues
+- 🏷️ Automatic labeling and PR creation
+
+**Package Rules:**
+1. **Spring Boot**: All Spring dependencies grouped together
+2. **Maven Plugins**: Plugin updates grouped
+3. **Azure SDK**: Azure dependencies grouped
+4. **Milvus SDK**: Milvus dependencies grouped
+5. **Security**: High priority, immediate processing
+6. **Major Updates**: Separate PRs with "requires-review" label
+
+---
+
+### Security Tools Used
+
+| Tool | Purpose | Output Format |
+|------|---------|---------------|
+| **OWASP Dependency Check** | CVE scanning from NVD | HTML, JSON |
+| **Trivy** | Multi-purpose security scanner | SARIF |
+| **Maven Versions Plugin** | Dependency version analysis | Console, TXT |
+| **License Maven Plugin** | License compliance | TXT |
+
+---
+
+### Workflow Artifacts
+
+All reports are available as downloadable artifacts:
+
+| Artifact | Description | Retention |
+|----------|-------------|-----------|
+| `owasp-dependency-check-report` | Security vulnerability report | 30 days |
+| `dependency-updates-report` | List of outdated dependencies | 30 days |
+| `dependency-tree` | Full dependency graph | 30 days |
+| `trivy-security-report` | Trivy scan results (SARIF) | 30 days |
+| `license-report` | Third-party licenses | 30 days |
+
+---
+
+### Required Secrets
+
+**None** - This workflow does not require additional secrets beyond `GITHUB_TOKEN` (automatically provided)
+
+---
+
+### How It Works Together
+
+```
+Monday 9:00 AM UTC
+       │
+       ▼
+┌──────────────────────────────────────┐
+│  Dependency Updates Pipeline Starts  │
+└───────────────┬──────────────────────┘
+                │
+    ┌───────────┴───────────┐
+    │                       │
+    ▼                       ▼
+┌─────────┐         ┌──────────────┐
+│Security │         │  Dependency  │
+│  Scans  │         │   Analysis   │
+└────┬────┘         └──────┬───────┘
+     │                     │
+     └──────────┬──────────┘
+                ▼
+        ┌──────────────┐
+        │   All Pass?  │
+        └──────┬───────┘
+               │
+        ┌──────┴──────┐
+        │             │
+        ▼             ▼
+    ┌─────┐       ┌──────┐
+    │ YES │       │  NO  │
+    └──┬──┘       └───┬──┘
+       │              │
+       ▼              ▼
+  ┌─────────┐   ┌──────────┐
+  │Create PR│   │Create    │
+  │         │   │Issue     │
+  └────┬────┘   └──────────┘
+       │
+       ▼
+  ┌─────────┐
+  │ CI/CD   │  ◄── Existing pipeline runs on PR
+  │ Runs    │
+  └────┬────┘
+       │
+       ▼
+  ┌─────────┐
+  │ Manual  │
+  │ Review  │
+  └────┬────┘
+       │
+       ▼
+  ┌─────────┐
+  │  Merge  │
+  └─────────┘
+```
+
+---
+
+### Documentation
+
+For detailed information about the dependency updates pipeline, see:
+📄 **[Dependency Updates Pipeline Documentation](../docs/readmes/DEPENDENCY_UPDATES_PIPELINE.md)**
+
+---
+
 ### Important URLs
 - GitHub Actions: `https://github.com/YOUR-ORG/YOUR-REPO/actions`
 - Docker Hub: `https://hub.docker.com/r/reposync/`
