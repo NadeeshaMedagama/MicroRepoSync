@@ -4,7 +4,7 @@ A comprehensive Spring Boot microservices application that automatically syncs G
 
 ## 🏗️ Architecture
 
-This project follows a microservices architecture with five independent services:
+This project follows a microservices architecture with six independent services plus a complete monitoring stack:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -13,17 +13,17 @@ This project follows a microservices architecture with five independent services
 └────┬────────────┬────────────┬────────────┬─────────────────────┘
      │            │            │            │
      ▼            ▼            ▼            ▼
-┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐
-│ GitHub  │  │Document │  │Embedding│  │ Milvus  │
-│ Service │  │Processor│  │ Service │  │ Service │
-│         │  │ Service │  │         │  │         │
-└─────────┘  └─────────┘  └─────────┘  └─────────┘
-     │            │            │            │
-     ▼            ▼            ▼            ▼
-┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐
-│ GitHub  │  │Chunking │  │ Azure   │  │ Milvus  │
-│   API   │  │ Logic   │  │ OpenAI  │  │  DB     │
-└─────────┘  └─────────┘  └─────────┘  └─────────┘
+┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌──────────┐
+│ GitHub  │  │Document │  │Embedding│  │ Milvus  │  │Monitoring│
+│ Service │  │Processor│  │ Service │  │ Service │  │ Service  │
+│         │  │ Service │  │         │  │         │  │          │
+└─────────┘  └─────────┘  └─────────┘  └─────────┘  └────┬─────┘
+     │            │            │            │              │
+     ▼            ▼            ▼            ▼              ▼
+┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌──────────┐
+│ GitHub  │  │Chunking │  │ Azure   │  │ Milvus  │  │Prometheus│
+│   API   │  │ Logic   │  │ OpenAI  │  │  DB     │  │ & Grafana│
+└─────────┘  └─────────┘  └─────────┘  └─────────┘  └──────────┘
 ```
 
 ### Services
@@ -54,15 +54,40 @@ This project follows a microservices architecture with five independent services
    - Manual trigger via REST API
    - Resilience with retry logic
 
+6. **Monitoring Service** (Port 8085)
+   - Health monitoring and metrics aggregation
+   - Automated health checks every 30 seconds
+   - REST API for monitoring status
+   - Exposes metrics to Prometheus
+
+### Monitoring Stack
+
+- **Prometheus** (Port 9090)
+  - Metrics collection and storage
+  - Scrapes all services every 15 seconds
+  - Time-series database
+  - Alert rule evaluation
+
+- **Grafana** (Port 3000)
+  - Real-time dashboards and visualization
+  - Pre-configured dashboards for all services
+  - Connected to Prometheus
+  - Default credentials: admin/admin
+
 ## 🚀 Features
 
 - ✅ **Automated Daily Sync**: Runs at 8:00 AM every day via GitHub Actions
 - ✅ **Microservices Architecture**: Independent, scalable services following SOLID principles
+- ✅ **Complete Monitoring System**: Prometheus + Grafana with custom monitoring service
+- ✅ **Real-time Dashboards**: 8 pre-configured Grafana panels for all metrics
+- ✅ **Intelligent Alerting**: 8 alert rules for critical conditions
 - ✅ **Docker & Kubernetes Ready**: Complete containerization and K8s manifests
 - ✅ **CI/CD Pipeline**: Automated build, test, and deployment
+- ✅ **Dependency Updates**: Weekly automated dependency and security checks
+- ✅ **Security Scanning**: OWASP, Trivy, and license compliance checks
 - ✅ **Local & Cloud Support**: Works in both local and GitHub Actions environments
 - ✅ **Resilience**: Retry logic, circuit breakers, and fallback mechanisms
-- ✅ **Observability**: Health checks, metrics, and logging
+- ✅ **Full Observability**: Health checks, metrics, logging, and monitoring
 
 ## 📋 Prerequisites
 
@@ -108,7 +133,11 @@ MILVUS_COLLECTION_NAME=reposync_collection
 ### 3. Build the Project
 
 ```bash
+# Full build with all checks
 mvn clean install
+
+# Fast build (skip tests and checkstyle)
+mvn clean package -DskipTests -Dcheckstyle.skip=true
 ```
 
 ## 🏃 Running Locally
@@ -116,7 +145,7 @@ mvn clean install
 ### Option 1: Using Docker Compose (Recommended)
 
 ```bash
-# Start all services including Milvus
+# Start all services including Milvus and monitoring stack
 docker-compose up -d
 
 # Check logs
@@ -124,6 +153,11 @@ docker-compose logs -f
 
 # Trigger manual sync
 curl -X POST http://localhost:8080/api/orchestrator/sync
+
+# Access monitoring interfaces
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
+# Monitoring API: http://localhost:8085/api/monitoring
 
 # Stop all services
 docker-compose down
@@ -225,13 +259,16 @@ Two workflows are configured:
 
 ### Service Ports
 
-| Service | Port |
-|---------|------|
-| Orchestrator | 8080 |
-| GitHub | 8081 |
-| Document Processor | 8082 |
-| Embedding | 8083 |
-| Milvus | 8084 |
+| Service | Port | Description |
+|---------|------|-------------|
+| Orchestrator | 8080 | Main workflow coordinator |
+| GitHub | 8081 | GitHub API integration |
+| Document Processor | 8082 | Document chunking |
+| Embedding | 8083 | Azure OpenAI embeddings |
+| Milvus | 8084 | Vector database service |
+| Monitoring | 8085 | Health & metrics aggregation |
+| Prometheus | 9090 | Metrics collection |
+| Grafana | 3000 | Monitoring dashboards |
 
 ### Chunking Configuration
 
@@ -253,25 +290,182 @@ reposync:
     cron: "0 0 8 * * *"  # Daily at 8:00 AM
 ```
 
-## 📊 Monitoring
+## 📊 Monitoring & Observability
+
+The application includes a comprehensive monitoring system built with **Prometheus** and **Grafana**, following SOLID principles.
+
+### Quick Start Monitoring
+
+```bash
+# Start the monitoring stack
+./docs/scripts/start-monitoring.sh
+
+# Or manually with docker-compose
+docker-compose up -d monitoring-service prometheus grafana
+```
+
+### Access Monitoring Interfaces
+
+| Interface | URL | Credentials | Description |
+|-----------|-----|-------------|-------------|
+| **Grafana** | http://localhost:3000 | admin/admin | Visual dashboards |
+| **Prometheus** | http://localhost:9090 | - | Metrics & queries |
+| **Monitoring API** | http://localhost:8085/api/monitoring | - | Health status API |
+
+### Monitoring Service Features
+
+The **Monitoring Service** (Port 8085) provides:
+
+- **Automated Health Checks**: Polls all services every 30 seconds
+- **Metrics Aggregation**: Collects and aggregates metrics from all services
+- **REST API**: Programmatic access to health and metrics data
+- **Prometheus Integration**: Exposes metrics in Prometheus format
+
+#### Monitoring API Endpoints
+
+```bash
+# Get system-wide health status
+curl http://localhost:8085/api/monitoring/health
+
+# Get health of all services
+curl http://localhost:8085/api/monitoring/services/health
+
+# Get specific service health
+curl http://localhost:8085/api/monitoring/services/github-service/health
+
+# Get unhealthy services
+curl http://localhost:8085/api/monitoring/services/unhealthy
+
+# Trigger manual health check
+curl -X POST http://localhost:8085/api/monitoring/health/check
+```
+
+### Prometheus Metrics
+
+**Prometheus** (Port 9090) collects metrics from all services:
+
+- **Scrape Interval**: 15 seconds
+- **Retention**: 15 days (default)
+- **Alert Evaluation**: Every 15 seconds
+
+#### Available Metrics
+
+Each service exposes Prometheus metrics at `/actuator/prometheus`:
+
+- **JVM Metrics**: Memory, threads, GC, class loading
+- **HTTP Metrics**: Request count, latency, status codes
+- **System Metrics**: CPU, disk, uptime
+- **Custom Metrics**: Service-specific business metrics
+
+#### Useful Prometheus Queries
+
+```promql
+# Service availability
+up{job=~".*-service"}
+
+# Request rate (requests per second)
+rate(http_server_requests_seconds_count[5m])
+
+# Memory usage percentage
+(jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100
+
+# 95th percentile response time
+histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (job, le))
+
+# Error rate
+rate(http_server_requests_seconds_count{status=~"5.."}[5m])
+
+# CPU usage
+system_cpu_usage * 100
+```
+
+### Grafana Dashboards
+
+**Grafana** (Port 3000) provides real-time visualization:
+
+- **Pre-configured Dashboard**: RepoSync Microservices Overview
+- **8 Monitoring Panels**:
+  1. Service Availability - Real-time service status
+  2. HTTP Request Rate - Requests per second by service
+  3. Response Time (95th percentile) - Latency tracking
+  4. JVM Memory Usage - Heap memory monitoring
+  5. CPU Usage - System and process CPU
+  6. Thread Count - Thread pool monitoring
+  7. Error Rate - 4xx and 5xx errors
+  8. Garbage Collection Time - GC performance
+
+#### Accessing Grafana
+
+1. Navigate to http://localhost:3000
+2. Login with `admin` / `admin`
+3. Dashboard is auto-provisioned and ready to use
+
+### Alert Rules
+
+The system includes **8 pre-configured alert rules**:
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| **ServiceDown** | Service down > 1 minute | Critical |
+| **HighMemoryUsage** | Heap > 85% for 5 minutes | Warning |
+| **CriticalMemoryUsage** | Heap > 95% for 2 minutes | Critical |
+| **HighCPUUsage** | CPU > 80% for 5 minutes | Warning |
+| **HighErrorRate** | Error rate > 10% | Critical |
+| **LowRequestRate** | Request rate very low | Info |
+| **FrequentGC** | GC > 5 times/sec for 5 min | Warning |
+| **HighThreadCount** | Threads > 200 | Warning |
+
+View active alerts in Prometheus: http://localhost:9090/alerts
 
 ### Health Checks
 
-Each service exposes actuator endpoints:
+Each service exposes Spring Boot Actuator health endpoints:
 
 ```bash
-curl http://localhost:8080/actuator/health
-curl http://localhost:8081/actuator/health
-curl http://localhost:8082/actuator/health
-curl http://localhost:8083/actuator/health
-curl http://localhost:8084/actuator/health
+# Check individual services
+curl http://localhost:8080/actuator/health  # Orchestrator
+curl http://localhost:8081/actuator/health  # GitHub
+curl http://localhost:8082/actuator/health  # Document Processor
+curl http://localhost:8083/actuator/health  # Embedding
+curl http://localhost:8084/actuator/health  # Milvus
+curl http://localhost:8085/actuator/health  # Monitoring
 ```
 
-### Metrics
+### Metrics Endpoints
+
+Access Prometheus-formatted metrics:
 
 ```bash
-curl http://localhost:8080/actuator/metrics
+curl http://localhost:8080/actuator/prometheus
+curl http://localhost:8081/actuator/prometheus
+# ... etc for all services
 ```
+
+### Monitoring Documentation
+
+For detailed monitoring documentation, see:
+
+- **[Monitoring Guide](docs/readmes/monitoring/MONITORING_GUIDE.md)** - Comprehensive 400+ line guide
+- **[Monitoring Quick Start](docs/readmes/monitoring/MONITORING_QUICKSTART.md)** - Quick reference
+- **[Monitoring Architecture](docs/readmes/monitoring/MONITORING_ARCHITECTURE.md)** - Architecture diagrams
+- **[Monitoring Implementation](docs/readmes/monitoring/MONITORING_IMPLEMENTATION_SUMMARY.md)** - Implementation details
+
+### Troubleshooting Monitoring
+
+**Services not showing in Prometheus:**
+1. Check Prometheus targets: http://localhost:9090/targets
+2. Verify services are running: `docker ps`
+3. Check actuator endpoints: `curl http://localhost:8081/actuator/prometheus`
+
+**Grafana shows no data:**
+1. Verify Prometheus connection in Configuration → Data Sources
+2. Check time range in dashboard
+3. Run queries in Prometheus UI first
+
+**High memory alerts:**
+1. Check service logs: `docker logs <container-name>`
+2. Review JVM heap settings in Dockerfile
+3. Consider increasing memory allocation
 
 ## 🧪 Testing
 
@@ -312,6 +506,14 @@ mvn test
 - `POST /api/milvus/vectors/upsert` - Upsert vectors
 - `GET /api/milvus/collection/{name}/exists` - Check collection existence
 
+### Monitoring Service
+
+- `GET /api/monitoring/health` - Get system-wide health status
+- `GET /api/monitoring/services/health` - Get health of all services
+- `GET /api/monitoring/services/{serviceName}/health` - Get specific service health
+- `GET /api/monitoring/services/unhealthy` - Get list of unhealthy services
+- `POST /api/monitoring/health/check` - Trigger manual health check
+
 ## 🛡️ SOLID Principles Implementation
 
 - **Single Responsibility**: Each service has one clear responsibility
@@ -351,6 +553,68 @@ docker-compose logs <service-name>
 - Verify MILVUS_URI is correct
 - Check if Milvus is running: `docker ps | grep milvus`
 - Review Milvus logs: `docker logs milvus-standalone`
+
+## 📚 Documentation
+
+Comprehensive documentation is available in the `docs/readmes/` directory:
+
+### 📊 Monitoring & Observability
+- **[Monitoring Guide](docs/readmes/monitoring/MONITORING_GUIDE.md)** - Comprehensive monitoring guide (400+ lines)
+- **[Monitoring Quick Start](docs/readmes/monitoring/MONITORING_QUICKSTART.md)** - Quick reference
+- **[Monitoring Architecture](docs/readmes/monitoring/MONITORING_ARCHITECTURE.md)** - Architecture diagrams
+- **[Monitoring Implementation](docs/readmes/monitoring/MONITORING_IMPLEMENTATION_SUMMARY.md)** - Implementation details
+
+### 🚀 Quick Start Guides
+- **[Quick Start Guide](docs/readmes/setup-guides/QUICKSTART.md)** - Get started in 5 minutes
+- **[Local Setup Guide](docs/readmes/setup-guides/LOCAL_SETUP_GUIDE.md)** - Detailed local development setup
+- **[Local Run Guide](docs/readmes/setup-guides/LOCAL_RUN_GUIDE.md)** - Running services locally
+- **[IntelliJ IDEA Guide](docs/readmes/setup-guides/INTELLIJ_GUIDE.md)** - IDE setup and configuration
+- **[Setup Checklist](docs/readmes/setup-guides/SETUP_CHECKLIST.md)** - Complete setup checklist
+- **[Visual Guide](docs/readmes/setup-guides/VISUAL_GUIDE.md)** - Screenshots and visual walkthrough
+
+### 🏗️ Architecture & Design
+- **[Project Structure](docs/readmes/project-overview/PROJECT_STRUCTURE.md)** - Project organization and structure
+- **[Pipeline Architecture](docs/readmes/ci-cd/PIPELINE_ARCHITECTURE.md)** - CI/CD pipeline architecture
+
+### 🔄 CI/CD & Automation
+- **[GitHub Actions Pipeline](.github/GITHUB_ACTIONS_PIPELINE.md)** - Complete pipeline documentation
+- **[Dependency Updates Pipeline](docs/readmes/ci-cd/DEPENDENCY_UPDATES_PIPELINE.md)** - Security and dependency management
+- **[Dependency Updates Quick Start](docs/readmes/ci-cd/DEPENDENCY_UPDATES_QUICKSTART.md)** - Quick reference guide
+- **[Integration Verification](docs/readmes/integration/INTEGRATION_VERIFICATION.md)** - Pipeline integration validation
+- **[Implementation Summary](docs/readmes/ci-cd/COMPLETE_WORKFLOWS_IMPLEMENTATION.md)** - Complete implementation guide
+
+### 🔨 Build & Deployment
+- **[Build Status](docs/readmes/build-deployment/BUILD_STATUS.md)** - Current build status
+- **[Java 21 Build Fix](docs/readmes/build-deployment/JAVA21_BUILD_FIX.md)** - Java 21 migration notes
+- **[Build Fix Summary](docs/readmes/build-deployment/BUILD_FIX_SUMMARY.md)** - Build fixes applied
+
+### 📋 Project Status
+- **[Project Complete](docs/readmes/project-overview/PROJECT_COMPLETE.md)** - Project completion summary
+- **[Final Summary](docs/readmes/project-overview/FINAL_SUMMARY.md)** - Final project summary
+
+### 📖 Main Documentation Index
+- **[Complete Documentation Index](docs/readmes/README.md)** - Navigate all documentation
+
+## 🔒 Security
+
+### Automated Security Scanning
+
+The project includes comprehensive security scanning:
+
+- **OWASP Dependency Check**: Weekly CVE scanning (every Monday 9 AM UTC)
+- **Trivy Scanner**: Multi-purpose vulnerability scanning
+- **License Compliance**: Automated third-party license tracking
+- **GitHub Security**: Integration with GitHub Advanced Security
+
+### Security Reports
+
+Security reports are generated automatically and available in GitHub Actions artifacts:
+- OWASP Dependency Check Reports (HTML)
+- Trivy Security Reports (SARIF)
+- Dependency Tree Analysis
+- License Compliance Reports
+
+See the [Dependency Updates Pipeline Documentation](docs/readmes/DEPENDENCY_UPDATES_PIPELINE.md) for details.
 
 ## 📄 License
 
