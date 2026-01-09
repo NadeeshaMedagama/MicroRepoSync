@@ -1,0 +1,145 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base"
+  ],
+  "description": "Renovate configuration for RepoSync Microservices",
+  "timezone": "UTC",
+  "schedule": [
+    "before 10am on monday"
+  ],
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "assignees": [],
+  "reviewers": [],
+  "semanticCommits": "enabled",
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "packageRules": [
+    {
+      "description": "Group Spring Boot dependencies",
+      "groupName": "Spring Boot",
+      "matchPackagePatterns": [
+        "^org\\.springframework\\.boot:",
+        "^org\\.springframework:",
+        "^org\\.springframework\\.cloud:"
+      ],
+      "schedule": [
+        "before 10am on monday"
+      ]
+    },
+    {
+      "description": "Group Maven plugins",
+      "groupName": "Maven plugins",
+      "matchManagers": [
+        "maven"
+      ],
+      "matchDepTypes": [
+        "plugin"
+      ]
+    },
+    {
+      "description": "Azure dependencies",
+      "groupName": "Azure SDK",
+      "matchPackagePatterns": [
+        "^com\\.azure:"
+      ]
+    },
+    {
+      "description": "Milvus SDK",
+      "groupName": "Milvus SDK",
+      "matchPackagePatterns": [
+        "^io\\.milvus:"
+      ]
+    },
+    {
+      "description": "Automerge minor and patch updates for non-critical dependencies",
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "matchDepTypes": [
+        "dependencies"
+      ],
+      "excludePackagePatterns": [
+        "^org\\.springframework\\.boot:",
+        "^com\\.azure:",
+        "^io\\.milvus:"
+      ],
+      "automerge": false,
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Separate major updates with breaking changes",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "labels": [
+        "dependencies",
+        "major-update",
+        "requires-review"
+      ],
+      "automerge": false,
+      "schedule": [
+        "before 10am on monday"
+      ]
+    },
+    {
+      "description": "Security updates - high priority",
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "matchPackagePatterns": [
+        ".*"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "enabled": true,
+      "prPriority": 10,
+      "labels": [
+        "dependencies",
+        "security"
+      ]
+    },
+    {
+      "description": "Docker base images",
+      "matchDatasources": [
+        "docker"
+      ],
+      "enabled": true,
+      "schedule": [
+        "before 10am on monday"
+      ]
+    }
+  ],
+  "maven": {
+    "enabled": true
+  },
+  "docker": {
+    "enabled": true,
+    "pinDigests": false
+  },
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": [
+      "security",
+      "vulnerability"
+    ],
+    "automerge": false,
+    "schedule": [
+      "at any time"
+    ]
+  },
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "🔄 Dependency Dashboard",
+  "dependencyDashboardHeader": "This dashboard provides an overview of all dependency updates.",
+  "suppressNotifications": [
+    "prIgnoreNotification"
+  ],
+  "rebaseWhen": "conflicted",
+  "rangeStrategy": "bump"
+}
+
