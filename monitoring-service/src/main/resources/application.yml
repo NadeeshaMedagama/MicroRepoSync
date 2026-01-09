@@ -1,0 +1,45 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: monitoring-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+monitoring:
+  scrape-interval-seconds: 30
+  health-check-timeout-ms: 5000
+  services:
+    - name: github-service
+      url: http://github-service:8081
+      enabled: true
+    - name: document-processor-service
+      url: http://document-processor-service:8082
+      enabled: true
+    - name: embedding-service
+      url: http://embedding-service:8083
+      enabled: true
+    - name: milvus-service
+      url: http://milvus-service:8084
+      enabled: true
+    - name: orchestrator-service
+      url: http://orchestrator-service:8080
+      enabled: true
+
+logging:
+  level:
+    com.reposync: INFO
+    org.springframework: WARN
+
