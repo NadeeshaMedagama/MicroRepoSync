@@ -1,0 +1,92 @@
+groups:
+  - name: reposync_alerts
+    interval: 30s
+    rules:
+      # Service Health Alerts
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} has been down for more than 1 minute"
+
+      - alert: ServiceHighResponseTime
+        expr: http_server_requests_seconds_max > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time on {{ $labels.job }}"
+          description: "Service {{ $labels.job }} has response time > 5s"
+
+      # Memory Alerts
+      - alert: HighMemoryUsage
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "Memory usage is above 85% on {{ $labels.job }}"
+
+      - alert: CriticalMemoryUsage
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical memory usage on {{ $labels.job }}"
+          description: "Memory usage is above 95% on {{ $labels.job }}"
+
+      # CPU Alerts
+      - alert: HighCPUUsage
+        expr: system_cpu_usage * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.job }}"
+          description: "CPU usage is above 80% on {{ $labels.job }}"
+
+      # Thread Alerts
+      - alert: HighThreadCount
+        expr: jvm_threads_live > 200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High thread count on {{ $labels.job }}"
+          description: "Thread count is above 200 on {{ $labels.job }}"
+
+      # Error Rate Alerts
+      - alert: HighErrorRate
+        expr: rate(http_server_requests_seconds_count{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "Error rate is above 10% on {{ $labels.job }}"
+
+      # Request Rate Alerts
+      - alert: LowRequestRate
+        expr: rate(http_server_requests_seconds_count[5m]) < 0.01
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Low request rate on {{ $labels.job }}"
+          description: "Request rate is very low on {{ $labels.job }}"
+
+      # GC Alerts
+      - alert: FrequentGarbageCollection
+        expr: rate(jvm_gc_pause_seconds_count[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Frequent garbage collection on {{ $labels.job }}"
+          description: "GC is happening more than 5 times per second on {{ $labels.job }}"
+
