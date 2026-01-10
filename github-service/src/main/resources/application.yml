@@ -1,0 +1,26 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: github-service
+
+github:
+  api:
+    base-url: https://api.github.com
+  token: ${REPOSYNC_GITHUB_TOKEN}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.reposync.github: INFO
+    org.springframework.web: INFO
+
