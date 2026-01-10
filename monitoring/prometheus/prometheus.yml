@@ -1,0 +1,83 @@
+# Prometheus Configuration for RepoSync Microservices Monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'reposync-cluster'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Monitoring Service
+  - job_name: 'monitoring-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['monitoring-service:8085']
+        labels:
+          service: 'monitoring-service'
+          tier: 'monitoring'
+
+  # GitHub Service
+  - job_name: 'github-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['github-service:8081']
+        labels:
+          service: 'github-service'
+          tier: 'integration'
+
+  # Document Processor Service
+  - job_name: 'document-processor-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['document-processor-service:8082']
+        labels:
+          service: 'document-processor-service'
+          tier: 'processing'
+
+  # Embedding Service
+  - job_name: 'embedding-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['embedding-service:8083']
+        labels:
+          service: 'embedding-service'
+          tier: 'ml'
+
+  # Milvus Service
+  - job_name: 'milvus-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['milvus-service:8084']
+        labels:
+          service: 'milvus-service'
+          tier: 'database'
+
+  # Orchestrator Service
+  - job_name: 'orchestrator-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['orchestrator-service:8080']
+        labels:
+          service: 'orchestrator-service'
+          tier: 'orchestration'
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          tier: 'monitoring'
+
