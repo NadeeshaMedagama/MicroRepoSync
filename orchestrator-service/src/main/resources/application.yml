@@ -1,0 +1,53 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: orchestrator-service
+
+reposync:
+  organization: ${REPOSYNC_ORGANIZATION}
+  filter-keyword: ${REPOSYNC_FILTER_KEYWORD:}
+  schedule:
+    cron: "0 0 8 * * *"  # Daily at 8:00 AM
+
+services:
+  github:
+    url: ${GITHUB_SERVICE_URL:http://localhost:8081}
+  processor:
+    url: ${PROCESSOR_SERVICE_URL:http://localhost:8082}
+  embedding:
+    url: ${EMBEDDING_SERVICE_URL:http://localhost:8083}
+  milvus:
+    url: ${MILVUS_SERVICE_URL:http://localhost:8084}
+
+milvus:
+  collection-name: ${MILVUS_COLLECTION_NAME:reposync_collection}
+
+azure:
+  openai:
+    vector-dimension: 1536
+
+resilience4j:
+  retry:
+    instances:
+      syncWorkflow:
+        maxAttempts: 3
+        waitDuration: 5s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,scheduledtasks
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.reposync.orchestrator: INFO
+    org.springframework.web: INFO
+
