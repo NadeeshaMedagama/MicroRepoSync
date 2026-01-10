@@ -1,0 +1,26 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: milvus-service
+
+milvus:
+  uri: ${MILVUS_URI}
+  token: ${MILVUS_TOKEN:}
+  collection-name: ${MILVUS_COLLECTION_NAME:reposync_collection}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.reposync.milvus: INFO
+    org.springframework.web: INFO
+
