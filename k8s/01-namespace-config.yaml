@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: reposync
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: reposync-secrets
+  namespace: reposync
+type: Opaque
+stringData:
+  REPOSYNC_GITHUB_TOKEN: ""
+  AZURE_OPENAI_API_KEY: ""
+  MILVUS_TOKEN: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reposync-config
+  namespace: reposync
+data:
+  REPOSYNC_ORGANIZATION: ""
+  REPOSYNC_FILTER_KEYWORD: ""
+  AZURE_OPENAI_ENDPOINT: ""
+  AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ""
+  MILVUS_URI: ""
+  MILVUS_COLLECTION_NAME: "reposync_collection"
+  GITHUB_SERVICE_URL: "http://github-service:8081"
+  PROCESSOR_SERVICE_URL: "http://document-processor-service:8082"
+  EMBEDDING_SERVICE_URL: "http://embedding-service:8083"
+  MILVUS_SERVICE_URL: "http://milvus-service:8084"
+
