@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-processor-service
+  namespace: reposync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: document-processor-service
+  template:
+    metadata:
+      labels:
+        app: document-processor-service
+    spec:
+      containers:
+      - name: document-processor-service
+        image: reposync/document-processor-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8082
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8082
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8082
+          initialDelaySeconds: 30
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-processor-service
+  namespace: reposync
+spec:
+  selector:
+    app: document-processor-service
+  ports:
+  - protocol: TCP
+    port: 8082
+    targetPort: 8082
+  type: ClusterIP
+
