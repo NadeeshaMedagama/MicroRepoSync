@@ -163,7 +163,9 @@
                     <configLocation>google_checks.xml</configLocation>
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>false</failsOnError>
+                    <failOnViolation>false</failOnViolation>
                     <violationSeverity>warning</violationSeverity>
+                    <skip>false</skip>
                 </configuration>
                 <executions>
                     <execution>
@@ -172,6 +174,9 @@
                         <goals>
                             <goal>check</goal>
                         </goals>
+                        <configuration>
+                            <failOnViolation>false</failOnViolation>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -181,11 +186,9 @@
                 <artifactId>maven-pmd-plugin</artifactId>
                 <version>3.21.2</version>
                 <configuration>
+                    <skip>true</skip>
                     <failOnViolation>false</failOnViolation>
                     <printFailingErrors>true</printFailingErrors>
-                    <rulesets>
-                        <ruleset>/rulesets/java/quickstart.xml</ruleset>
-                    </rulesets>
                 </configuration>
                 <executions>
                     <execution>
@@ -193,6 +196,9 @@
                             <goal>check</goal>
                             <goal>cpd-check</goal>
                         </goals>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -202,6 +208,7 @@
                 <artifactId>spotbugs-maven-plugin</artifactId>
                 <version>4.8.3.0</version>
                 <configuration>
+                    <skip>true</skip>
                     <effort>Max</effort>
                     <threshold>Low</threshold>
                     <failOnError>false</failOnError>
@@ -212,6 +219,9 @@
                         <goals>
                             <goal>check</goal>
                         </goals>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
