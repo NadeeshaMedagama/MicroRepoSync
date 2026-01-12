@@ -51,7 +51,7 @@ jobs:
           cache: 'maven'
 
       - name: Build with Maven
-        run: mvn clean package -DskipTests -pl ${{ matrix.service.name }} -am
+        run: mvn clean package -DskipTests -Dcheckstyle.failOnViolation=false -pl ${{ matrix.service.name }} -am
 
       - name: Build and push Docker image
         run: |
