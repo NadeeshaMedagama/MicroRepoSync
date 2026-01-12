@@ -13,6 +13,8 @@ jobs:
   deploy:
     name: Deploy Services to Cloud Run
     runs-on: ubuntu-latest
+    # Only run if GCP credentials are configured
+    if: ${{ secrets.GCP_SA_KEY != '' }}
 
     strategy:
       matrix:
