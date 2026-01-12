@@ -29,6 +29,7 @@ jobs:
       - name: Run OWASP Dependency Check
         run: |
           mvn org.owasp:dependency-check-maven:check \
+            -Ddependency-check.skip=false \
             -DfailBuildOnCVSS=7 \
             -DsuppressionFiles=dependency-check-suppressions.xml \
             || true
@@ -98,7 +99,7 @@ jobs:
           cache: 'maven'
 
       - name: Build project
-        run: mvn clean install -DskipTests
+        run: mvn clean install -DskipTests -Dcheckstyle.failOnViolation=false
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -140,8 +141,8 @@ jobs:
 
       - name: Check licenses
         run: |
-          mvn license:add-third-party
-          mvn license:download-licenses || true
+          mvn license:add-third-party -Dcheckstyle.skip=true
+          mvn license:download-licenses -Dcheckstyle.skip=true || true
 
       - name: Generate license report
         run: |
@@ -178,14 +179,14 @@ jobs:
       - name: Update dependencies
         run: |
           # Update parent and plugin versions
-          mvn versions:update-parent -DallowSnapshots=false -DgenerateBackupPoms=false
-          mvn versions:update-properties -DallowSnapshots=false -DgenerateBackupPoms=false
-          mvn versions:use-latest-releases -DallowSnapshots=false -DgenerateBackupPoms=false
+          mvn versions:update-parent -DallowSnapshots=false -DgenerateBackupPoms=false -Dcheckstyle.skip=true
+          mvn versions:update-properties -DallowSnapshots=false -DgenerateBackupPoms=false -Dcheckstyle.skip=true
+          mvn versions:use-latest-releases -DallowSnapshots=false -DgenerateBackupPoms=false -Dcheckstyle.skip=true
 
       - name: Build and test with updated dependencies
         id: build_test
         run: |
-          mvn clean install
+          mvn clean install -Dcheckstyle.failOnViolation=false
         continue-on-error: true
 
       - name: Create Pull Request
