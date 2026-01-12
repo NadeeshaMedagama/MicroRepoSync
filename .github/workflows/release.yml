@@ -107,6 +107,14 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      - name: Verify Java version
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo "Java version:"
+          java -version
+          echo "Maven Java version:"
+          mvn -version
+
       - name: Build service
         run: |
           mvn clean package -DskipTests -Dcheckstyle.failOnViolation=false -pl ${{ matrix.service }} -am
@@ -217,6 +225,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Verify Java version
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo "Java version:"
+          java -version
+          echo "Maven Java version:"
+          mvn -version
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -246,12 +269,6 @@ jobs:
             type=semver,pattern={{major}},value=${{ needs.create-release.outputs.version }}
             type=raw,value=latest
 
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
 
       - name: Build with Maven
         run: mvn clean package -DskipTests -Dcheckstyle.failOnViolation=false -pl ${{ matrix.service }} -am
