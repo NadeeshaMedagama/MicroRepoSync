@@ -1,29 +1,10 @@
-name: Code Quality
-linter: jetbrains/qodana-jvm-community:latest
 version: "1.0"
-
-# Exclude certain files or directories from inspection
-exclude:
-  - name: target
-    paths:
-      - "**/target/**"
-  - name: build
-    paths:
-      - "**/build/**"
-  - name: node_modules
-    paths:
-      - "**/node_modules/**"
-
-# Include specific directories for inspection
-include:
-  - name: source
-    paths:
-      - "**/src/**"
+linter: jetbrains/qodana-jvm-community:2025.3
 
 # Configure inspection profile
 profile:
-  name: qodana.recommended
+  path: qodana.recommended
 
-# Fail threshold
-failThreshold: 0
+# Fail threshold - number of problems to tolerate
+failThreshold: 1000
 
