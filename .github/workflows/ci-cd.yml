@@ -181,8 +181,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=reposync/${{ matrix.service }}:buildcache
-          cache-to: type=registry,ref=reposync/${{ matrix.service }}:buildcache,mode=max
+          cache-from: type=registry,ref=MicroRepoSync/${{ matrix.service }}:buildcache
+          cache-to: type=registry,ref=MicroRepoSync/${{ matrix.service }}:buildcache,mode=max
 
   deploy-to-kubernetes:
     name: Deploy to Kubernetes
