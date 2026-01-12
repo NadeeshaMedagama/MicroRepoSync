@@ -164,7 +164,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: reposync/${{ matrix.service }}
+          images: MicroRepoSync/${{ matrix.service }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
