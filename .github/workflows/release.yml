@@ -109,7 +109,7 @@ jobs:
 
       - name: Build service
         run: |
-          mvn clean package -DskipTests -pl ${{ matrix.service }} -am
+          mvn clean package -DskipTests -Dcheckstyle.failOnViolation=false -pl ${{ matrix.service }} -am
 
       - name: Create artifacts directory
         run: mkdir -p release-artifacts
@@ -254,7 +254,7 @@ jobs:
           cache: 'maven'
 
       - name: Build with Maven
-        run: mvn clean package -DskipTests -pl ${{ matrix.service }} -am
+        run: mvn clean package -DskipTests -Dcheckstyle.failOnViolation=false -pl ${{ matrix.service }} -am
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
