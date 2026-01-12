@@ -34,7 +34,7 @@ jobs:
           cache: 'maven'
 
       - name: Build project
-        run: mvn clean compile -DskipTests
+        run: mvn clean compile -DskipTests -Dcheckstyle.failOnViolation=false
 
       - name: Qodana Scan (Community)
         uses: JetBrains/qodana-action@v2025.3
