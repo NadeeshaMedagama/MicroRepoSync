@@ -136,7 +136,7 @@ jobs:
     name: Build Docker Images
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
 
     strategy:
       matrix:
@@ -188,7 +188,7 @@ jobs:
     name: Deploy to Kubernetes
     needs: build-docker-images
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
 
     steps:
       - name: Checkout code
