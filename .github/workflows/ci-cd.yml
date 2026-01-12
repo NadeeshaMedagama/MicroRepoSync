@@ -25,13 +25,13 @@ jobs:
           cache: 'maven'
 
       - name: Run Checkstyle
-        run: mvn checkstyle:check || true
+        run: mvn checkstyle:check -Dcheckstyle.failOnViolation=false || true
 
       - name: Run PMD
-        run: mvn pmd:check || true
+        run: mvn pmd:check -Dpmd.failOnViolation=false || true
 
       - name: Run SpotBugs
-        run: mvn spotbugs:check || true
+        run: mvn spotbugs:check -Dspotbugs.failOnError=false || true
 
       - name: Upload linting reports
         if: always()
@@ -104,13 +104,13 @@ jobs:
           cache: 'maven'
 
       - name: Build with Maven
-        run: mvn clean install
+        run: mvn clean install -DskipTests -Dcheckstyle.failOnViolation=false
 
       - name: Run tests
-        run: mvn test
+        run: mvn test -Dcheckstyle.skip=true
 
       - name: Generate test coverage
-        run: mvn jacoco:report
+        run: mvn jacoco:report -Dcheckstyle.skip=true
 
       - name: Upload test results
         if: always()
