@@ -119,14 +119,28 @@ jobs:
 
     steps:
       - name: Authenticate to Google Cloud
+        id: auth
         uses: google-github-actions/auth@v2
+        continue-on-error: true
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      - name: Check if GCP authentication succeeded
+        id: check-auth
+        run: |
+          if [ "${{ steps.auth.outcome }}" == "success" ]; then
+            echo "authenticated=true" >> $GITHUB_OUTPUT
+          else
+            echo "authenticated=false" >> $GITHUB_OUTPUT
+            echo "⚠️ GCP authentication skipped - credentials not configured"
+          fi
+
       - name: Set up Cloud SDK
+        if: steps.check-auth.outputs.authenticated == 'true'
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Get all service URLs
+        if: steps.check-auth.outputs.authenticated == 'true'
         id: urls
         run: |
           GITHUB_URL=$(gcloud run services describe github-service --platform managed --region $REGION --format 'value(status.url)')
@@ -142,6 +156,7 @@ jobs:
           echo "orchestrator_url=$ORCHESTRATOR_URL" >> $GITHUB_OUTPUT
 
       - name: Update orchestrator service with URLs
+        if: steps.check-auth.outputs.authenticated == 'true'
         run: |
           gcloud run services update orchestrator-service \
             --platform managed \
@@ -158,14 +173,28 @@ jobs:
 
     steps:
       - name: Authenticate to Google Cloud
+        id: auth
         uses: google-github-actions/auth@v2
+        continue-on-error: true
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      - name: Check if GCP authentication succeeded
+        id: check-auth
+        run: |
+          if [ "${{ steps.auth.outcome }}" == "success" ]; then
+            echo "authenticated=true" >> $GITHUB_OUTPUT
+          else
+            echo "authenticated=false" >> $GITHUB_OUTPUT
+            echo "⚠️ GCP authentication skipped - credentials not configured"
+          fi
+
       - name: Set up Cloud SDK
+        if: steps.check-auth.outputs.authenticated == 'true'
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Check service health
+        if: steps.check-auth.outputs.authenticated == 'true'
         run: |
           for service in github-service document-processor-service embedding-service milvus-service orchestrator-service; do
             URL=$(gcloud run services describe $service --platform managed --region $REGION --format 'value(status.url)')
