@@ -75,7 +75,7 @@ jobs:
           sarif_file: 'trivy-fs-results.sarif'
 
       - name: Run OWASP Dependency Check
-        run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 || true
+        run: mvn org.owasp:dependency-check-maven:check -Ddependency-check.skip=false -DfailBuildOnCVSS=7 || true
 
       - name: Upload security reports
         if: always()
