@@ -13,7 +13,8 @@ jobs:
   deploy-preview:
     name: Deploy Preview Environment
     runs-on: ubuntu-latest
-    if: github.event.action != 'closed'
+    # Only run if GCP credentials are configured and PR is not closed
+    if: github.event.action != 'closed' && secrets.GCP_SA_KEY != ''
 
     steps:
       - name: Checkout code
@@ -202,7 +203,8 @@ jobs:
   cleanup-preview:
     name: Cleanup Preview Environment
     runs-on: ubuntu-latest
-    if: github.event.action == 'closed'
+    # Only run if GCP credentials are configured and PR is closed
+    if: github.event.action == 'closed' && secrets.GCP_SA_KEY != ''
 
     steps:
       - name: Authenticate to Google Cloud
