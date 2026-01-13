@@ -29,6 +29,12 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      - name: Verify Java version
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          java -version
+          mvn -version
+
       - name: Run Checkstyle
         run: mvn checkstyle:check -Dcheckstyle.failOnViolation=false || true
 
@@ -63,6 +69,12 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
+
+      - name: Verify Java version
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          java -version
+          mvn -version
 
       - name: Run Trivy vulnerability scanner (filesystem)
         uses: aquasecurity/trivy-action@master
@@ -128,6 +140,12 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
+
+      - name: Verify Java version
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          java -version
+          mvn -version
 
       - name: Build with Maven
         run: mvn clean install -DskipTests -Dcheckstyle.failOnViolation=false
