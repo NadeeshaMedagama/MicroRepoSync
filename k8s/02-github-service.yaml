@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: github-service
-        image: reposync/github-service:latest
+        image: nadeeshamedagama/github-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8081
