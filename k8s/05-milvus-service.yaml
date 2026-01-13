@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: milvus-service
-        image: reposync/milvus-service:latest
+        image: nadeeshamedagama/milvus-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8084
