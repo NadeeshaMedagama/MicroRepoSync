@@ -4,7 +4,7 @@
 # Kubernetes Manifest Validation Script
 #
 # This script validates Kubernetes manifests without requiring a cluster
-# connection. It uses kubectl with --dry-run=client flag.
+# connection. It uses kubeconform for static validation.
 #
 # Usage:
 #   ./validate-k8s.sh                    # Validate all manifests in k8s/
@@ -38,14 +38,30 @@ print_warning() {
     echo -e "${YELLOW}⚠${NC} $1"
 }
 
-# Check if kubectl is installed
-if ! command -v kubectl &> /dev/null; then
-    print_error "kubectl is not installed. Please install kubectl first."
-    echo "Visit: https://kubernetes.io/docs/tasks/tools/"
-    exit 1
+# Check if kubeconform is installed
+if ! command -v kubeconform &> /dev/null; then
+    print_warning "kubeconform is not installed. Installing..."
+
+    # Download and install kubeconform
+    TEMP_DIR=$(mktemp -d)
+    cd "$TEMP_DIR"
+
+    wget -q https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+    tar xf kubeconform-linux-amd64.tar.gz
+
+    if [ -w /usr/local/bin ]; then
+        mv kubeconform /usr/local/bin/
+    else
+        sudo mv kubeconform /usr/local/bin/
+    fi
+
+    cd - > /dev/null
+    rm -rf "$TEMP_DIR"
+
+    print_success "kubeconform installed successfully"
 fi
 
-print_success "kubectl found: $(kubectl version --client --short 2>/dev/null || kubectl version --client)"
+print_success "kubeconform found: $(kubeconform -v 2>&1)"
 
 # Determine what to validate
 TARGET="${1:-k8s}"
@@ -55,36 +71,24 @@ if [ ! -e "$TARGET" ]; then
     exit 1
 fi
 
-# Function to validate a single file
-validate_file() {
-    local file="$1"
-    print_info "Validating: $file"
-
-    if kubectl apply --dry-run=client -f "$file" > /dev/null 2>&1; then
-        print_success "Valid: $file"
-        return 0
-    else
-        print_error "Invalid: $file"
-        echo "Error details:"
-        kubectl apply --dry-run=client -f "$file" 2>&1 | sed 's/^/  /'
-        return 1
-    fi
-}
-
-# Main validation logic
-FAILED_FILES=()
-VALIDATED_COUNT=0
-
 echo ""
 print_info "Starting Kubernetes manifest validation..."
 echo ""
 
+# Validate using kubeconform
 if [ -f "$TARGET" ]; then
     # Single file validation
-    if validate_file "$TARGET"; then
-        VALIDATED_COUNT=1
+    print_info "Validating file: $TARGET"
+    echo ""
+
+    if kubeconform -summary -verbose "$TARGET"; then
+        echo ""
+        print_success "Manifest is valid! ✨"
+        exit 0
     else
-        FAILED_FILES+=("$TARGET")
+        echo ""
+        print_error "Validation failed!"
+        exit 1
     fi
 elif [ -d "$TARGET" ]; then
     # Directory validation
@@ -99,36 +103,15 @@ elif [ -d "$TARGET" ]; then
     print_info "Found ${#YAML_FILES[@]} YAML file(s) to validate"
     echo ""
 
-    for file in "${YAML_FILES[@]}"; do
-        if validate_file "$file"; then
-            ((VALIDATED_COUNT++))
-        else
-            FAILED_FILES+=("$file")
-        fi
+    # Run kubeconform on all files
+    if kubeconform -summary -verbose "${YAML_FILES[@]}"; then
         echo ""
-    done
-fi
-
-# Print summary
-echo ""
-echo "================================================"
-echo "             Validation Summary"
-echo "================================================"
-echo ""
-print_info "Total files validated: $VALIDATED_COUNT"
-
-if [ ${#FAILED_FILES[@]} -eq 0 ]; then
-    print_success "All manifests are valid! ✨"
-    echo ""
-    exit 0
-else
-    print_error "${#FAILED_FILES[@]} file(s) failed validation:"
-    for file in "${FAILED_FILES[@]}"; do
-        echo "  - $file"
-    done
-    echo ""
-    print_info "Tip: Use 'kubectl apply --dry-run=client -f <file>' for detailed error messages"
-    echo ""
-    exit 1
+        print_success "All manifests are valid! ✨"
+        exit 0
+    else
+        echo ""
+        print_error "Some manifests failed validation!"
+        exit 1
+    fi
 fi
 
