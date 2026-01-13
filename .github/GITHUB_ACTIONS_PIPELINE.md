@@ -24,32 +24,88 @@ Automates the build, test, Docker image creation, and Kubernetes deployment proc
 
 ### Pipeline Stages
 
-#### Stage 1: Build and Test
+#### Stage 0: Validate Kubernetes Manifests
+**Job Name:** `validate-k8s-manifests`
+
+**What it does:**
+- ✅ Validates all Kubernetes YAML manifests for syntax and schema correctness
+- ✅ Uses `kubeconform` for static validation (no cluster required)
+- ✅ Runs in parallel with other quality checks
+
+**Why kubeconform instead of kubectl:**
+- ✅ Does not require a live Kubernetes cluster connection
+- ✅ Faster validation using cached schemas
+- ✅ Works reliably in CI/CD environments
+- ✅ Validates against official Kubernetes schemas
+
+**Validation Command:**
+```bash
+kubeconform -summary -verbose k8s/*.yaml
+```
+
+**Runs on:** Every push and pull request
+
+---
+
+#### Stage 1: Lint and Code Quality
+**Job Name:** `lint-and-code-quality`
+
+**What it does:**
+- ✅ Runs Checkstyle for code style validation
+- ✅ Runs PMD for code quality analysis
+- ✅ Runs SpotBugs for bug detection
+- ✅ Uploads linting reports as artifacts
+
+**Runs on:** Every push and pull request
+
+---
+
+#### Stage 2: Security Scanning
+**Job Name:** `security-scan`
+
+**What it does:**
+- ✅ Runs Trivy vulnerability scanner on filesystem
+- ✅ Runs OWASP Dependency Check for CVE scanning
+- ✅ Uploads security reports to GitHub Security tab
+- ✅ Uploads reports as artifacts
+
+**Runs on:** Every push and pull request
+
+---
+
+#### Stage 3: Build and Test
+
+#### Stage 3: Build and Test
 **Job Name:** `build-and-test`
+
+**Dependencies:** Requires `lint-and-code-quality`, `security-scan`, and `validate-k8s-manifests` to pass
 
 **What it does:**
 - ✅ Checks out the source code
-- ✅ Sets up Java 17 environment (⚠️ **Needs update to Java 21**)
+- ✅ Sets up Java 21 environment
 - ✅ Caches Maven dependencies for faster builds
 - ✅ Builds all services using `mvn clean install`
 - ✅ Runs all unit and integration tests
-- ✅ Uploads test results as artifacts for review
+- ✅ Generates test coverage reports
+- ✅ Uploads test results and coverage as artifacts
 
 **Runs on:** Every push and pull request
 
 **Key Commands:**
 ```bash
-mvn clean install
-mvn test
+mvn clean install -DskipTests -Dcheckstyle.failOnViolation=false
+mvn test -Dcheckstyle.skip=true
+mvn jacoco:report -Dcheckstyle.skip=true
 ```
 
 **Outputs:**
 - Test results uploaded as artifacts
+- Coverage reports uploaded as artifacts
 - Build artifacts cached for subsequent jobs
 
 ---
 
-#### Stage 2: Build Docker Images
+#### Stage 4: Build Docker Images
 **Job Name:** `build-docker-images`
 
 **Dependencies:** Requires `build-and-test` to pass
@@ -84,7 +140,7 @@ Uses GitHub Actions matrix strategy to build all services in parallel, significa
 
 ---
 
-#### Stage 3: Deploy to Kubernetes
+#### Stage 5: Deploy to Kubernetes
 **Job Name:** `deploy-to-kubernetes`
 
 **Dependencies:** Requires `build-docker-images` to pass
