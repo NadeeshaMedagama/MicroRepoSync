@@ -14,10 +14,10 @@ spec:
       labels:
         app: monitoring-service
     spec:
-      containers:
-        - name: monitoring-service
-          image: reposync/monitoring-service:latest
-          imagePullPolicy: IfNotPresent
+        containers:
+          - name: monitoring-service
+            image: nadeeshamedagama/monitoring-service:latest
+            imagePullPolicy: Always
           ports:
             - containerPort: 8085
               name: http
