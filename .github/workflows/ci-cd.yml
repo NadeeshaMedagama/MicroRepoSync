@@ -183,7 +183,7 @@ jobs:
             --from-literal=REPOSYNC_GITHUB_TOKEN="test-token" \
             --from-literal=AZURE_OPENAI_API_KEY="test-key" \
             --from-literal=MILVUS_TOKEN="test-token" \
-            --namespace=reposync
+            --namespace=reposync \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create ConfigMap (test values)
@@ -199,7 +199,7 @@ jobs:
             --from-literal=PROCESSOR_SERVICE_URL="http://document-processor-service:8082" \
             --from-literal=EMBEDDING_SERVICE_URL="http://embedding-service:8083" \
             --from-literal=MILVUS_SERVICE_URL="http://milvus-service:8084" \
-            --namespace=reposync
+            --namespace=reposync \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Test deployment with server-side dry-run
