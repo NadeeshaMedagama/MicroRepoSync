@@ -164,7 +164,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: MicroRepoSync/${{ matrix.service }}
+          images: nadeeshamedagama/${{ matrix.service }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -181,8 +181,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=MicroRepoSync/${{ matrix.service }}:buildcache
-          cache-to: type=registry,ref=MicroRepoSync/${{ matrix.service }}:buildcache,mode=max
+          cache-from: type=registry,ref=nadeeshamedagama/${{ matrix.service }}:buildcache
+          cache-to: type=registry,ref=nadeeshamedagama/${{ matrix.service }}:buildcache,mode=max
 
   deploy-to-kubernetes:
     name: Deploy to Kubernetes
