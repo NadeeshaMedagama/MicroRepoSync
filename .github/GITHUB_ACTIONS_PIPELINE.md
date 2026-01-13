@@ -24,15 +24,16 @@ Automates the build, test, Docker image creation, and Kubernetes deployment proc
 
 ### Pipeline Stages
 
-#### Stage 0: Validate Kubernetes Manifests
+#### Stage 0: Validate Kubernetes Manifests (Schema)
 **Job Name:** `validate-k8s-manifests`
 
 **What it does:**
 - ✅ Validates all Kubernetes YAML manifests for syntax and schema correctness
 - ✅ Uses `kubeconform` for static validation (no cluster required)
+- ✅ Fast validation using cached schemas
 - ✅ Runs in parallel with other quality checks
 
-**Why kubeconform instead of kubectl:**
+**Why kubeconform:**
 - ✅ Does not require a live Kubernetes cluster connection
 - ✅ Faster validation using cached schemas
 - ✅ Works reliably in CI/CD environments
@@ -44,6 +45,37 @@ kubeconform -summary -verbose k8s/*.yaml
 ```
 
 **Runs on:** Every push and pull request
+
+---
+
+#### Stage 0b: Test Kubernetes Deployment (Kind)
+**Job Name:** `test-k8s-deployment`
+
+**What it does:**
+- ✅ Creates a temporary Kubernetes cluster using Kind (Kubernetes in Docker)
+- ✅ Tests actual deployment of manifests with server-side validation
+- ✅ Validates that secrets and configmaps are correctly referenced
+- ✅ Ensures manifests are compatible with real Kubernetes API
+- ✅ Uses `--dry-run=server` for validation without actually deploying pods
+
+**Why Kind:**
+- ✅ FREE - runs on GitHub Actions runners at no cost
+- ✅ Real Kubernetes API server for accurate validation
+- ✅ Tests actual deployment scenarios
+- ✅ Validates resource dependencies (secrets, configmaps, etc.)
+- ✅ Temporary cluster - deleted after tests complete
+
+**Test Flow:**
+```bash
+1. Create Kind cluster
+2. Create namespace
+3. Create test secrets and configmaps
+4. Validate each deployment with --dry-run=server
+```
+
+**Runs on:** Every push and pull request (after build-and-test)
+
+**Cost:** $0 (uses free GitHub Actions runners)
 
 ---
 
@@ -108,15 +140,15 @@ mvn jacoco:report -Dcheckstyle.skip=true
 #### Stage 4: Build Docker Images
 **Job Name:** `build-docker-images`
 
-**Dependencies:** Requires `build-and-test` to pass
+**Dependencies:** Requires `build-and-test` and `test-k8s-deployment` to pass
 
 **What it does:**
 - ✅ Builds Docker images for **all 5 microservices** in parallel
-- ✅ Pushes images to Docker Hub registry
+- ✅ Pushes images to Docker Hub registry (`nadeeshamedagama/*`)
 - ✅ Tags images with multiple tags (branch, SHA, version, latest)
 - ✅ Uses Docker layer caching for faster builds
 
-**Runs on:** Only on pushes to `main` branch (not on pull requests)
+**Runs on:** Only on pushes to `master` branch (not on pull requests)
 
 **Services Built:**
 1. `github-service`
@@ -129,59 +161,60 @@ mvn jacoco:report -Dcheckstyle.skip=true
 Uses GitHub Actions matrix strategy to build all services in parallel, significantly reducing build time.
 
 **Docker Image Tags:**
-- `reposync/github-service:main`
-- `reposync/github-service:sha-abc1234`
-- `reposync/github-service:latest`
-- `reposync/github-service:1.0.0` (if using semver)
+- `nadeeshamedagama/github-service:master`
+- `nadeeshamedagama/github-service:sha-abc1234`
+- `nadeeshamedagama/github-service:latest`
 
 **Required Secrets:**
-- `DOCKER_USERNAME` - Docker Hub username
+- `DOCKER_USERNAME` - Docker Hub username (should be: nadeeshamedagama)
 - `DOCKER_PASSWORD` - Docker Hub password or access token
 
 ---
 
-#### Stage 5: Deploy to Kubernetes
-**Job Name:** `deploy-to-kubernetes`
+### Deployment
 
-**Dependencies:** Requires `build-docker-images` to pass
+**Note:** The CI/CD pipeline validates manifests and builds Docker images but does **not** automatically deploy to production Kubernetes clusters.
 
-**What it does:**
-- ✅ Configures `kubectl` CLI tool
-- ✅ Creates/updates Kubernetes secrets with sensitive data
-- ✅ Creates/updates Kubernetes ConfigMaps with configuration
-- ✅ Deploys all microservices to Kubernetes cluster
-- ✅ Waits for all deployments to be ready (rollout status)
-- ✅ Verifies deployment by listing pods and services
+**For deployment**, you have several options:
 
-**Runs on:** Only on pushes to `main` branch
+1. **Manual Deployment:** 
+   ```bash
+   kubectl apply -f k8s/
+   ```
 
-**Deployment Order:**
-1. Namespace and configuration
-2. GitHub Service
-3. Document Processor Service
-4. Embedding Service
-5. Milvus Service
-6. Orchestrator Service
+2. **Cloud Run:** Use the separate `deploy-cloud-run.yml` workflow for Google Cloud Run deployments
 
-**Kubernetes Resources Created:**
-- **Secrets:** `reposync-secrets` (GitHub token, Azure API key, Milvus token)
-- **ConfigMap:** `reposync-config` (Organization, keywords, endpoints, URLs)
-- **Deployments:** All 5 microservices
-- **Services:** ClusterIP services for internal communication
+3. **Custom CD Pipeline:** Configure your own deployment workflow with cluster credentials as needed
 
-**Required Secrets:**
-- `KUBE_CONFIG` - Base64-encoded kubeconfig file for cluster access
-- `REPOSYNC_GITHUB_TOKEN`
-- `REPOSYNC_ORGANIZATION`
-- `REPOSYNC_FILTER_KEYWORD`
-- `AZURE_OPENAI_API_KEY`
-- `AZURE_OPENAI_ENDPOINT`
-- `AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT`
-- `MILVUS_URI`
-- `MILVUS_TOKEN`
-- `MILVUS_COLLECTION_NAME`
+The pipeline ensures:
+- ✅ Manifests are syntactically valid (kubeconform)
+- ✅ Manifests are deployment-ready (Kind testing with real K8s API)
+- ✅ Docker images are built and pushed to Docker Hub
+- ✅ All tests pass before images are published
 
-**Timeout:** 5 minutes per deployment
+---
+
+### Summary of Pipeline Flow
+
+```
+Push/PR to master/develop
+          │
+          ├─→ validate-k8s-manifests (kubeconform) ──┐
+          ├─→ lint-and-code-quality ─────────────────┤
+          └─→ security-scan ─────────────────────────┤
+                                                      ▼
+                                             build-and-test
+                                                      ▼
+                                        test-k8s-deployment (Kind)
+                                                      ▼
+                                   build-docker-images (master only)
+                                                      │
+                                                  ✅ Done
+```
+
+**Total Pipeline Time (estimated):**
+- PR builds: ~8-12 minutes (validation + build + test + Kind testing)
+- Master builds: ~15-20 minutes (includes Docker image builds and pushes)
 
 ---
 
