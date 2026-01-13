@@ -26,6 +26,12 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      - name: Verify Java version
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          java -version
+          mvn -version
+
       - name: Run OWASP Dependency Check
         run: |
           mvn org.owasp:dependency-check-maven:check \
@@ -71,6 +77,12 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      - name: Verify Java version
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          java -version
+          mvn -version
+
       - name: Generate dependency tree
         run: |
           mvn dependency:tree > dependency-tree.txt
@@ -97,6 +109,12 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
+
+      - name: Verify Java version
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          java -version
+          mvn -version
 
       - name: Build project
         run: mvn clean install -DskipTests -Dcheckstyle.failOnViolation=false
