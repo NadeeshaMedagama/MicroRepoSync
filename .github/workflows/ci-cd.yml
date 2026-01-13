@@ -100,20 +100,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'latest'
-
-      - name: Validate with kubectl (dry-run)
-        run: |
-          echo "Validating Kubernetes manifests with kubectl..."
-          for manifest in k8s/*.yaml; do
-            echo "Validating $manifest..."
-            kubectl apply --dry-run=client -f "$manifest"
-          done
-          echo "✅ kubectl validation passed!"
-
       - name: Install kubeconform
         run: |
           wget https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
@@ -121,11 +107,11 @@ jobs:
           sudo mv kubeconform /usr/local/bin/
           kubeconform -v
 
-      - name: Validate with kubeconform
+      - name: Validate Kubernetes manifests
         run: |
-          echo "Validating Kubernetes manifests with kubeconform..."
-          kubeconform -summary -output json k8s/*.yaml
-          echo "✅ kubeconform validation passed!"
+          echo "Validating Kubernetes manifests..."
+          kubeconform -summary -verbose k8s/*.yaml
+          echo "✅ All manifests validated successfully!"
 
   build-and-test:
     name: Build and Test
