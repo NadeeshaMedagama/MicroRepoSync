@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: embedding-service
-        image: reposync/embedding-service:latest
+        image: nadeeshamedagama/embedding-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8083
