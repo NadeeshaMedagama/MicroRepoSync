@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: orchestrator-service
-        image: reposync/orchestrator-service:latest
+        image: nadeeshamedagama/orchestrator-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
