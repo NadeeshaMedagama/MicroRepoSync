@@ -52,6 +52,13 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      - name: Verify Java version
+        if: steps.check-auth.outputs.authenticated == 'true'
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          java -version
+          mvn -version
+
       - name: Build with Maven
         if: steps.check-auth.outputs.authenticated == 'true'
         run: mvn clean package -DskipTests -Dcheckstyle.failOnViolation=false
