@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: document-processor-service
-        image: reposync/document-processor-service:latest
+        image: nadeeshamedagama/document-processor-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8082
