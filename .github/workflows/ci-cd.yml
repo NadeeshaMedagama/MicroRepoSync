@@ -92,10 +92,45 @@ jobs:
             **/target/dependency-check-report.html
           retention-days: 30
 
+  validate-k8s-manifests:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Validate with kubectl (dry-run)
+        run: |
+          echo "Validating Kubernetes manifests with kubectl..."
+          for manifest in k8s/*.yaml; do
+            echo "Validating $manifest..."
+            kubectl apply --dry-run=client -f "$manifest"
+          done
+          echo "✅ kubectl validation passed!"
+
+      - name: Install kubeconform
+        run: |
+          wget https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+          kubeconform -v
+
+      - name: Validate with kubeconform
+        run: |
+          echo "Validating Kubernetes manifests with kubeconform..."
+          kubeconform -summary -output json k8s/*.yaml
+          echo "✅ kubeconform validation passed!"
+
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest
-    needs: [lint-and-code-quality, security-scan]
+    needs: [lint-and-code-quality, security-scan, validate-k8s-manifests]
 
     steps:
       - name: Checkout code
