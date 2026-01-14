@@ -230,63 +230,52 @@ jobs:
             exit 1
           fi
           
-          echo "=== Sync Result Content ==="
+          # 1. Always print the raw JSON first so we see the error message
+          echo "=== Sync Result JSON ==="
           cat sync-result.json
+          echo "========================"
           echo ""
           
-          STATUS=$(jq -r '.status // "UNKNOWN"' sync-result.json)
-          ERROR_MSG=$(jq -r '.errorMessage // "No error message"' sync-result.json)
+          # 2. Extract fields
+          STATUS=$(jq -r '.status' sync-result.json)
+          ERROR_MSG=$(jq -r '.errorMessage' sync-result.json)
+          
+          # 3. Check Status
+          if [ "$STATUS" != "SUCCESS" ]; then
+            echo "❌ Sync Logic Failed!"
+            echo "Status: $STATUS"
+            echo "Reason: $ERROR_MSG"
+            
+            echo ""
+            echo "=== Tailing Service Logs for Debugging ==="
+            # Print the last 150 lines of the Orchestrator log specifically
+            # because that is where the Java Exception stack trace lives.
+            echo "--- Orchestrator Logs (last 150 lines) ---"
+            tail -n 150 orchestrator-service/orchestrator-service.log
+            
+            echo ""
+            echo "--- GitHub Service Logs (last 50 lines) ---"
+            tail -n 50 github-service/github-service.log || echo "No github service logs"
+            
+            echo ""
+            echo "--- Embedding Service Logs (last 50 lines) ---"
+            tail -n 50 embedding-service/embedding-service.log || echo "No embedding service logs"
+            
+            echo ""
+            echo "--- Milvus Service Logs (last 50 lines) ---"
+            tail -n 50 milvus-service/milvus-service.log || echo "No milvus service logs"
+            
+            # Fail the build
+            exit 1
+          fi
+          
+          # 4. Success case - show statistics
           REPOS=$(jq -r '.repositoriesProcessed // 0' sync-result.json)
           DOCS=$(jq -r '.documentsProcessed // 0' sync-result.json)
           CHUNKS=$(jq -r '.chunksCreated // 0' sync-result.json)
           VECTORS=$(jq -r '.vectorsStored // 0' sync-result.json)
           
-          echo "Status: $STATUS"
-          echo "Repositories processed: $REPOS"
-          echo "Documents processed: $DOCS"
-          echo "Chunks created: $CHUNKS"
-          echo "Vectors stored: $VECTORS"
-          
-          if [ "$STATUS" != "SUCCESS" ]; then
-            echo ""
-            echo "❌ Sync failed with status: $STATUS"
-            echo "Error message: $ERROR_MSG"
-            echo ""
-            echo "=== Detailed Service Logs ==="
-            echo ""
-            echo "--- Orchestrator Service (last 200 lines) ---"
-            tail -200 orchestrator-service/orchestrator-service.log || echo "No orchestrator logs"
-            echo ""
-            echo "--- GitHub Service (last 100 lines) ---"
-            tail -100 github-service/github-service.log || echo "No github service logs"
-            echo ""
-            echo "--- Document Processor Service (last 100 lines) ---"
-            tail -100 document-processor-service/processor-service.log || echo "No processor logs"
-            echo ""
-            echo "--- Embedding Service (last 100 lines) ---"
-            tail -100 embedding-service/embedding-service.log || echo "No embedding logs"
-            echo ""
-            echo "--- Milvus Service (last 100 lines) ---"
-            tail -100 milvus-service/milvus-service.log || echo "No milvus logs"
-            echo ""
-            echo "=== Environment Check ==="
-            echo "GitHub Service URL: http://localhost:8081"
-            echo "Document Processor URL: http://localhost:8082"
-            echo "Embedding Service URL: http://localhost:8083"
-            echo "Milvus Service URL: http://localhost:8084"
-            echo "Orchestrator URL: http://localhost:8080"
-            echo ""
-            echo "Service Health Checks:"
-            curl -s http://localhost:8081/actuator/health || echo "GitHub Service not responding"
-            curl -s http://localhost:8082/actuator/health || echo "Document Processor not responding"
-            curl -s http://localhost:8083/actuator/health || echo "Embedding Service not responding"
-            curl -s http://localhost:8084/actuator/health || echo "Milvus Service not responding"
-            curl -s http://localhost:8080/actuator/health || echo "Orchestrator not responding"
-            exit 1
-          fi
-          
-          echo ""
-          echo "✓ Sync completed successfully!"
+          echo "✅ Sync Success!"
           echo "📊 Statistics:"
           echo "  • Repositories processed: $REPOS"
           echo "  • Documents processed: $DOCS"
