@@ -58,142 +58,221 @@ public class WorkflowOrchestrator {
         String jobId = UUID.randomUUID().toString();
         LocalDateTime startTime = LocalDateTime.now();
 
-        log.info("Starting sync workflow - Job ID: {}", jobId);
+        log.info("=== Starting sync workflow - Job ID: {} ===", jobId);
+        log.info("Organization: {}, Filter: {}, Collection: {}", organization, filterKeyword, collectionName);
 
         try {
             // Step 1: Fetch repositories from GitHub
             log.info("Step 1: Fetching repositories from organization: {}", organization);
-            List<RepositoryInfo> repositories = fetchRepositories();
-            log.info("Found {} repositories", repositories.size());
+            List<RepositoryInfo> repositories = null;
+            try {
+                repositories = fetchRepositories();
+                log.info("✓ Found {} repositories", repositories.size());
+            } catch (Exception e) {
+                log.error("✗ Step 1 FAILED - Error fetching repositories: {}", e.getMessage(), e);
+                throw new RuntimeException("Step 1 failed: " + e.getMessage(), e);
+            }
 
             if (repositories.isEmpty()) {
+                log.info("No repositories found matching criteria - completing with SUCCESS");
                 return buildResult(jobId, startTime, 0, 0, 0, 0, "SUCCESS",
                         "No repositories found matching criteria");
             }
 
             // Step 2: Fetch documents from all repositories
-            log.info("Step 2: Fetching documents from repositories");
+            log.info("Step 2: Fetching documents from {} repositories", repositories.size());
             List<DocumentContent> allDocuments = new ArrayList<>();
-            for (RepositoryInfo repo : repositories) {
-                try {
-                    String[] parts = repo.getFullName().split("/");
-                    List<DocumentContent> docs = fetchDocuments(parts[0], parts[1]);
-                    allDocuments.addAll(docs);
-                    log.info("Fetched {} documents from {}", docs.size(), repo.getFullName());
-                } catch (Exception e) {
-                    log.error("Error fetching documents from {}: {}", repo.getFullName(), e.getMessage());
+            try {
+                for (RepositoryInfo repo : repositories) {
+                    try {
+                        String[] parts = repo.getFullName().split("/");
+                        log.debug("Fetching documents from {}", repo.getFullName());
+                        List<DocumentContent> docs = fetchDocuments(parts[0], parts[1]);
+                        allDocuments.addAll(docs);
+                        log.info("  ✓ Fetched {} documents from {}", docs.size(), repo.getFullName());
+                    } catch (Exception e) {
+                        log.error("  ✗ Error fetching documents from {}: {}", repo.getFullName(), e.getMessage());
+                        // Continue with other repos
+                    }
                 }
+                log.info("✓ Step 2 complete - Total documents fetched: {}", allDocuments.size());
+            } catch (Exception e) {
+                log.error("✗ Step 2 FAILED - Error in document fetching loop: {}", e.getMessage(), e);
+                throw new RuntimeException("Step 2 failed: " + e.getMessage(), e);
             }
-            log.info("Total documents fetched: {}", allDocuments.size());
 
             if (allDocuments.isEmpty()) {
+                log.info("No documents found in repositories - completing with SUCCESS");
                 return buildResult(jobId, startTime, repositories.size(), 0, 0, 0, "SUCCESS",
                         "No documents found in repositories");
             }
 
             // Step 3: Chunk documents
             log.info("Step 3: Chunking {} documents", allDocuments.size());
-            List<TextChunk> chunks = chunkDocuments(allDocuments);
-            log.info("Created {} chunks", chunks.size());
+            List<TextChunk> chunks = null;
+            try {
+                chunks = chunkDocuments(allDocuments);
+                log.info("✓ Step 3 complete - Created {} chunks", chunks.size());
+            } catch (Exception e) {
+                log.error("✗ Step 3 FAILED - Error chunking documents: {}", e.getMessage(), e);
+                throw new RuntimeException("Step 3 failed: " + e.getMessage(), e);
+            }
 
             if (chunks.isEmpty()) {
+                log.info("No chunks created - completing with SUCCESS");
                 return buildResult(jobId, startTime, repositories.size(), allDocuments.size(),
                         0, 0, "SUCCESS", "No chunks created");
             }
 
             // Step 4: Generate embeddings
             log.info("Step 4: Generating embeddings for {} chunks", chunks.size());
-            List<EmbeddingVector> vectors = generateEmbeddings(chunks);
-            log.info("Generated {} embeddings", vectors.size());
+            List<EmbeddingVector> vectors = null;
+            try {
+                vectors = generateEmbeddings(chunks);
+                log.info("✓ Step 4 complete - Generated {} embeddings", vectors.size());
+            } catch (Exception e) {
+                log.error("✗ Step 4 FAILED - Error generating embeddings: {}", e.getMessage(), e);
+                throw new RuntimeException("Step 4 failed: " + e.getMessage(), e);
+            }
 
             // Step 5: Ensure Milvus collection exists
             log.info("Step 5: Ensuring Milvus collection exists: {}", collectionName);
-            ensureCollection();
+            try {
+                ensureCollection();
+                log.info("✓ Step 5 complete - Collection ready");
+            } catch (Exception e) {
+                log.error("✗ Step 5 FAILED - Error ensuring collection: {}", e.getMessage(), e);
+                throw new RuntimeException("Step 5 failed: " + e.getMessage(), e);
+            }
 
             // Step 6: Upsert vectors to Milvus
             log.info("Step 6: Upserting {} vectors to Milvus", vectors.size());
-            upsertVectors(vectors);
+            try {
+                upsertVectors(vectors);
+                log.info("✓ Step 6 complete - Vectors upserted");
+            } catch (Exception e) {
+                log.error("✗ Step 6 FAILED - Error upserting vectors: {}", e.getMessage(), e);
+                throw new RuntimeException("Step 6 failed: " + e.getMessage(), e);
+            }
 
             LocalDateTime endTime = LocalDateTime.now();
-            log.info("Sync workflow completed successfully - Job ID: {}", jobId);
+            log.info("=== Sync workflow completed successfully - Job ID: {} ===", jobId);
 
             return buildResult(jobId, startTime, repositories.size(), allDocuments.size(),
                     chunks.size(), vectors.size(), "SUCCESS", null);
 
         } catch (Exception e) {
-            log.error("Sync workflow failed - Job ID: {}: {}", jobId, e.getMessage(), e);
+            log.error("=== Sync workflow FAILED - Job ID: {} ===", jobId);
+            log.error("Error details: {}", e.getMessage(), e);
             LocalDateTime endTime = LocalDateTime.now();
-            return buildResult(jobId, startTime, 0, 0, 0, 0, "FAILED", e.getMessage());
+            return buildResult(jobId, startTime, 0, 0, 0, 0, "FAILED",
+                    "Workflow failed: " + e.getMessage() + " (Cause: " +
+                    (e.getCause() != null ? e.getCause().getMessage() : "unknown") + ")");
         }
     }
 
     private List<RepositoryInfo> fetchRepositories() {
         try {
-            return githubWebClient.get()
+            log.debug("Calling GitHub service at: {}/api/github/repositories?organization={}&filterKeyword={}",
+                    githubWebClient, organization, filterKeyword);
+
+            List<RepositoryInfo> repos = githubWebClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/api/github/repositories")
                             .queryParam("organization", organization)
                             .queryParam("filterKeyword", filterKeyword)
                             .build())
                     .retrieve()
+                    .onStatus(status -> !status.is2xxSuccessful(),
+                            response -> response.bodyToMono(String.class)
+                                    .map(body -> new RuntimeException("GitHub service error: " + response.statusCode() + " - " + body)))
                     .bodyToMono(new ParameterizedTypeReference<List<RepositoryInfo>>() {})
                     .block();
+
+            return repos != null ? repos : new ArrayList<>();
         } catch (Exception e) {
-            log.error("Failed to fetch repositories: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to fetch repositories from GitHub service", e);
+            log.error("Failed to fetch repositories from GitHub service: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to fetch repositories from GitHub service: " + e.getMessage(), e);
         }
     }
 
     private List<DocumentContent> fetchDocuments(String owner, String repo) {
         try {
-            return githubWebClient.get()
+            log.debug("Fetching documents from {}/{}", owner, repo);
+
+            List<DocumentContent> docs = githubWebClient.get()
                     .uri("/api/github/documents/{owner}/{repo}", owner, repo)
                     .retrieve()
+                    .onStatus(status -> !status.is2xxSuccessful(),
+                            response -> response.bodyToMono(String.class)
+                                    .map(body -> new RuntimeException("GitHub service error for " + owner + "/" + repo + ": " + response.statusCode() + " - " + body)))
                     .bodyToMono(new ParameterizedTypeReference<List<DocumentContent>>() {})
                     .block();
+
+            return docs != null ? docs : new ArrayList<>();
         } catch (Exception e) {
             log.error("Failed to fetch documents from {}/{}: {}", owner, repo, e.getMessage());
-            throw new RuntimeException("Failed to fetch documents from " + owner + "/" + repo, e);
+            throw new RuntimeException("Failed to fetch documents from " + owner + "/" + repo + ": " + e.getMessage(), e);
         }
     }
 
     private List<TextChunk> chunkDocuments(List<DocumentContent> documents) {
         try {
-            return processorWebClient.post()
+            log.debug("Sending {} documents to processor service for chunking", documents.size());
+
+            List<TextChunk> chunks = processorWebClient.post()
                     .uri("/api/processor/chunk/batch")
                     .bodyValue(documents)
                     .retrieve()
+                    .onStatus(status -> !status.is2xxSuccessful(),
+                            response -> response.bodyToMono(String.class)
+                                    .map(body -> new RuntimeException("Processor service error: " + response.statusCode() + " - " + body)))
                     .bodyToMono(new ParameterizedTypeReference<List<TextChunk>>() {})
                     .block();
+
+            return chunks != null ? chunks : new ArrayList<>();
         } catch (Exception e) {
-            log.error("Failed to chunk documents: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to chunk documents", e);
+            log.error("Failed to chunk documents via processor service: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to chunk documents: " + e.getMessage(), e);
         }
     }
 
     private List<EmbeddingVector> generateEmbeddings(List<TextChunk> chunks) {
         try {
-            return embeddingWebClient.post()
+            log.debug("Sending {} chunks to embedding service", chunks.size());
+
+            List<EmbeddingVector> vectors = embeddingWebClient.post()
                     .uri("/api/embedding/generate/batch")
                     .bodyValue(chunks)
                     .retrieve()
+                    .onStatus(status -> !status.is2xxSuccessful(),
+                            response -> response.bodyToMono(String.class)
+                                    .map(body -> new RuntimeException("Embedding service error: " + response.statusCode() + " - " + body)))
                     .bodyToMono(new ParameterizedTypeReference<List<EmbeddingVector>>() {})
                     .block();
+
+            return vectors != null ? vectors : new ArrayList<>();
         } catch (Exception e) {
-            log.error("Failed to generate embeddings: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to generate embeddings", e);
+            log.error("Failed to generate embeddings via embedding service: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to generate embeddings: " + e.getMessage(), e);
         }
     }
 
     private void ensureCollection() {
         try {
+            log.debug("Checking if collection '{}' exists", collectionName);
+
             Boolean exists = milvusWebClient.get()
                     .uri("/api/milvus/collection/{collectionName}/exists", collectionName)
                     .retrieve()
+                    .onStatus(status -> !status.is2xxSuccessful(),
+                            response -> response.bodyToMono(String.class)
+                                    .map(body -> new RuntimeException("Milvus service error checking collection: " + response.statusCode() + " - " + body)))
                     .bodyToMono(Boolean.class)
                     .block();
 
             if (exists == null || !exists) {
+                log.info("Collection '{}' does not exist, creating it with dimension {}", collectionName, vectorDimension);
                 milvusWebClient.post()
                         .uri(uriBuilder -> uriBuilder
                                 .path("/api/milvus/collection/create")
@@ -201,17 +280,25 @@ public class WorkflowOrchestrator {
                                 .queryParam("dimension", vectorDimension)
                                 .build())
                         .retrieve()
+                        .onStatus(status -> !status.is2xxSuccessful(),
+                                response -> response.bodyToMono(String.class)
+                                        .map(body -> new RuntimeException("Milvus service error creating collection: " + response.statusCode() + " - " + body)))
                         .bodyToMono(String.class)
                         .block();
+                log.info("Collection '{}' created successfully", collectionName);
+            } else {
+                log.debug("Collection '{}' already exists", collectionName);
             }
         } catch (Exception e) {
-            log.error("Failed to ensure collection exists: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to ensure Milvus collection exists", e);
+            log.error("Failed to ensure Milvus collection exists: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to ensure Milvus collection exists: " + e.getMessage(), e);
         }
     }
 
     private void upsertVectors(List<EmbeddingVector> vectors) {
         try {
+            log.debug("Upserting {} vectors to collection '{}'", vectors.size(), collectionName);
+
             milvusWebClient.post()
                     .uri(uriBuilder -> uriBuilder
                             .path("/api/milvus/vectors/upsert")
@@ -219,11 +306,16 @@ public class WorkflowOrchestrator {
                             .build())
                     .bodyValue(vectors)
                     .retrieve()
+                    .onStatus(status -> !status.is2xxSuccessful(),
+                            response -> response.bodyToMono(String.class)
+                                    .map(body -> new RuntimeException("Milvus service error upserting vectors: " + response.statusCode() + " - " + body)))
                     .bodyToMono(String.class)
                     .block();
+
+            log.debug("Successfully upserted {} vectors", vectors.size());
         } catch (Exception e) {
-            log.error("Failed to upsert vectors: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to upsert vectors to Milvus", e);
+            log.error("Failed to upsert vectors to Milvus: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to upsert vectors to Milvus: " + e.getMessage(), e);
         }
     }
 
