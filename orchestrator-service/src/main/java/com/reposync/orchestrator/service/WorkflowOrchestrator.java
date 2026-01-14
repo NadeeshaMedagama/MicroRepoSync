@@ -128,73 +128,103 @@ public class WorkflowOrchestrator {
     }
 
     private List<RepositoryInfo> fetchRepositories() {
-        return githubWebClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/api/github/repositories")
-                        .queryParam("organization", organization)
-                        .queryParam("filterKeyword", filterKeyword)
-                        .build())
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<RepositoryInfo>>() {})
-                .block();
+        try {
+            return githubWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/github/repositories")
+                            .queryParam("organization", organization)
+                            .queryParam("filterKeyword", filterKeyword)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<RepositoryInfo>>() {})
+                    .block();
+        } catch (Exception e) {
+            log.error("Failed to fetch repositories: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to fetch repositories from GitHub service", e);
+        }
     }
 
     private List<DocumentContent> fetchDocuments(String owner, String repo) {
-        return githubWebClient.get()
-                .uri("/api/github/documents/{owner}/{repo}", owner, repo)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<DocumentContent>>() {})
-                .block();
+        try {
+            return githubWebClient.get()
+                    .uri("/api/github/documents/{owner}/{repo}", owner, repo)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<DocumentContent>>() {})
+                    .block();
+        } catch (Exception e) {
+            log.error("Failed to fetch documents from {}/{}: {}", owner, repo, e.getMessage());
+            throw new RuntimeException("Failed to fetch documents from " + owner + "/" + repo, e);
+        }
     }
 
     private List<TextChunk> chunkDocuments(List<DocumentContent> documents) {
-        return processorWebClient.post()
-                .uri("/api/processor/chunk/batch")
-                .bodyValue(documents)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<TextChunk>>() {})
-                .block();
+        try {
+            return processorWebClient.post()
+                    .uri("/api/processor/chunk/batch")
+                    .bodyValue(documents)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<TextChunk>>() {})
+                    .block();
+        } catch (Exception e) {
+            log.error("Failed to chunk documents: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to chunk documents", e);
+        }
     }
 
     private List<EmbeddingVector> generateEmbeddings(List<TextChunk> chunks) {
-        return embeddingWebClient.post()
-                .uri("/api/embedding/generate/batch")
-                .bodyValue(chunks)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<EmbeddingVector>>() {})
-                .block();
+        try {
+            return embeddingWebClient.post()
+                    .uri("/api/embedding/generate/batch")
+                    .bodyValue(chunks)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<EmbeddingVector>>() {})
+                    .block();
+        } catch (Exception e) {
+            log.error("Failed to generate embeddings: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to generate embeddings", e);
+        }
     }
 
     private void ensureCollection() {
-        Boolean exists = milvusWebClient.get()
-                .uri("/api/milvus/collection/{collectionName}/exists", collectionName)
-                .retrieve()
-                .bodyToMono(Boolean.class)
-                .block();
-
-        if (exists == null || !exists) {
-            milvusWebClient.post()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/api/milvus/collection/create")
-                            .queryParam("collectionName", collectionName)
-                            .queryParam("dimension", vectorDimension)
-                            .build())
+        try {
+            Boolean exists = milvusWebClient.get()
+                    .uri("/api/milvus/collection/{collectionName}/exists", collectionName)
                     .retrieve()
-                    .bodyToMono(String.class)
+                    .bodyToMono(Boolean.class)
                     .block();
+
+            if (exists == null || !exists) {
+                milvusWebClient.post()
+                        .uri(uriBuilder -> uriBuilder
+                                .path("/api/milvus/collection/create")
+                                .queryParam("collectionName", collectionName)
+                                .queryParam("dimension", vectorDimension)
+                                .build())
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .block();
+            }
+        } catch (Exception e) {
+            log.error("Failed to ensure collection exists: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to ensure Milvus collection exists", e);
         }
     }
 
     private void upsertVectors(List<EmbeddingVector> vectors) {
-        milvusWebClient.post()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/api/milvus/vectors/upsert")
-                        .queryParam("collectionName", collectionName)
-                        .build())
-                .bodyValue(vectors)
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
+        try {
+            milvusWebClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/milvus/vectors/upsert")
+                            .queryParam("collectionName", collectionName)
+                            .build())
+                    .bodyValue(vectors)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+        } catch (Exception e) {
+            log.error("Failed to upsert vectors: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to upsert vectors to Milvus", e);
+        }
     }
 
     private SyncJobResult buildResult(String jobId, LocalDateTime startTime,
