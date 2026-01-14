@@ -31,6 +31,9 @@ jobs:
       - name: Build all services
         run: mvn clean package -DskipTests -Dcheckstyle.failOnViolation=false
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Set up environment variables
         run: |
           echo "REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}" >> $GITHUB_ENV
@@ -51,6 +54,21 @@ jobs:
           sleep 30
         env:
           REPOSYNC_GITHUB_TOKEN: ${{ secrets.REPOSYNC_GITHUB_TOKEN }}
+          SERVER_PORT: 8081
+
+      - name: Verify GitHub Service Health
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:8081/actuator/health > /dev/null 2>&1; then
+              echo "GitHub Service is healthy"
+              exit 0
+            fi
+            echo "Waiting for GitHub Service to be ready... ($i/30)"
+            sleep 2
+          done
+          echo "GitHub Service failed to start"
+          cat github-service/github-service.log
+          exit 1
 
       - name: Start Document Processor Service
         run: |
@@ -58,6 +76,22 @@ jobs:
           nohup java -jar target/*.jar > processor-service.log 2>&1 &
           echo $! > processor-service.pid
           sleep 20
+        env:
+          SERVER_PORT: 8082
+
+      - name: Verify Document Processor Service Health
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:8082/actuator/health > /dev/null 2>&1; then
+              echo "Document Processor Service is healthy"
+              exit 0
+            fi
+            echo "Waiting for Document Processor Service to be ready... ($i/30)"
+            sleep 2
+          done
+          echo "Document Processor Service failed to start"
+          cat document-processor-service/processor-service.log
+          exit 1
 
       - name: Start Embedding Service
         run: |
@@ -69,6 +103,21 @@ jobs:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
+          SERVER_PORT: 8083
+
+      - name: Verify Embedding Service Health
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:8083/actuator/health > /dev/null 2>&1; then
+              echo "Embedding Service is healthy"
+              exit 0
+            fi
+            echo "Waiting for Embedding Service to be ready... ($i/30)"
+            sleep 2
+          done
+          echo "Embedding Service failed to start"
+          cat embedding-service/embedding-service.log
+          exit 1
 
       - name: Start Milvus Service
         run: |
@@ -80,6 +129,21 @@ jobs:
           MILVUS_URI: ${{ secrets.MILVUS_URI }}
           MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
           MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
+          SERVER_PORT: 8084
+
+      - name: Verify Milvus Service Health
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:8084/actuator/health > /dev/null 2>&1; then
+              echo "Milvus Service is healthy"
+              exit 0
+            fi
+            echo "Waiting for Milvus Service to be ready... ($i/30)"
+            sleep 2
+          done
+          echo "Milvus Service failed to start"
+          cat milvus-service/milvus-service.log
+          exit 1
 
       - name: Start Orchestrator Service and Execute Sync
         run: |
@@ -95,32 +159,84 @@ jobs:
           PROCESSOR_SERVICE_URL: "http://localhost:8082"
           EMBEDDING_SERVICE_URL: "http://localhost:8083"
           MILVUS_SERVICE_URL: "http://localhost:8084"
+          SERVER_PORT: 8080
+
+      - name: Verify Orchestrator Service Health
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "Orchestrator Service is healthy"
+              exit 0
+            fi
+            echo "Waiting for Orchestrator Service to be ready... ($i/30)"
+            sleep 2
+          done
+          echo "Orchestrator Service failed to start"
+          cat orchestrator-service/orchestrator-service.log
+          exit 1
 
       - name: Trigger Sync Job
         run: |
-          sleep 30
-          curl -X POST http://localhost:8080/api/orchestrator/sync \
+          sleep 10
+          echo "Triggering sync job..."
+          HTTP_CODE=$(curl -s -w "%{http_code}" -X POST http://localhost:8080/api/orchestrator/sync \
             -H "Content-Type: application/json" \
-            -o sync-result.json
+            -o sync-result.json)
+          
+          echo "HTTP Response Code: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Error: Sync API returned HTTP $HTTP_CODE"
+            cat sync-result.json || echo "No response body"
+            cat orchestrator-service/orchestrator-service.log
+            exit 1
+          fi
+          
+          echo "Sync job response:"
           cat sync-result.json
 
       - name: Check Sync Status
         run: |
-          if [ -f sync-result.json ]; then
-            STATUS=$(jq -r '.status' sync-result.json)
-            if [ "$STATUS" != "SUCCESS" ]; then
-              echo "Sync failed with status: $STATUS"
-              exit 1
-            fi
-            echo "Sync completed successfully!"
-            echo "Repositories processed: $(jq -r '.repositoriesProcessed' sync-result.json)"
-            echo "Documents processed: $(jq -r '.documentsProcessed' sync-result.json)"
-            echo "Chunks created: $(jq -r '.chunksCreated' sync-result.json)"
-            echo "Vectors stored: $(jq -r '.vectorsStored' sync-result.json)"
-          else
-            echo "Sync result not found"
+          if [ ! -f sync-result.json ]; then
+            echo "Error: sync-result.json not found"
             exit 1
           fi
+          
+          echo "Sync result content:"
+          cat sync-result.json
+          
+          STATUS=$(jq -r '.status // "UNKNOWN"' sync-result.json)
+          ERROR_MSG=$(jq -r '.errorMessage // "No error message"' sync-result.json)
+          
+          echo "Status: $STATUS"
+          
+          if [ "$STATUS" != "SUCCESS" ]; then
+            echo "Sync failed with status: $STATUS"
+            echo "Error message: $ERROR_MSG"
+            echo ""
+            echo "=== Service Logs ==="
+            echo "--- Orchestrator Service ---"
+            tail -100 orchestrator-service/orchestrator-service.log || echo "No orchestrator logs"
+            echo ""
+            echo "--- GitHub Service ---"
+            tail -50 github-service/github-service.log || echo "No github service logs"
+            echo ""
+            echo "--- Document Processor Service ---"
+            tail -50 document-processor-service/processor-service.log || echo "No processor logs"
+            echo ""
+            echo "--- Embedding Service ---"
+            tail -50 embedding-service/embedding-service.log || echo "No embedding logs"
+            echo ""
+            echo "--- Milvus Service ---"
+            tail -50 milvus-service/milvus-service.log || echo "No milvus logs"
+            exit 1
+          fi
+          
+          echo "✓ Sync completed successfully!"
+          echo "Repositories processed: $(jq -r '.repositoriesProcessed // 0' sync-result.json)"
+          echo "Documents processed: $(jq -r '.documentsProcessed // 0' sync-result.json)"
+          echo "Chunks created: $(jq -r '.chunksCreated // 0' sync-result.json)"
+          echo "Vectors stored: $(jq -r '.vectorsStored // 0' sync-result.json)"
 
       - name: Upload logs
         if: always()
