@@ -69,6 +69,11 @@ public class WorkflowOrchestrator {
                 repositories = fetchRepositories();
                 log.info("✓ Found {} repositories", repositories.size());
             } catch (Exception e) {
+                System.err.println("✗ STEP 1 FAILED - Error fetching repositories");
+                System.err.println("Error: " + e.getMessage());
+                if (e.getCause() != null) {
+                    System.err.println("Root Cause: " + e.getCause().getMessage());
+                }
                 log.error("✗ Step 1 FAILED - Error fetching repositories: {}", e.getMessage(), e);
                 throw new RuntimeException("Step 1 failed: " + e.getMessage(), e);
             }
@@ -114,6 +119,8 @@ public class WorkflowOrchestrator {
                 chunks = chunkDocuments(allDocuments);
                 log.info("✓ Step 3 complete - Created {} chunks", chunks.size());
             } catch (Exception e) {
+                System.err.println("✗ STEP 3 FAILED - Error chunking documents");
+                System.err.println("Error: " + e.getMessage());
                 log.error("✗ Step 3 FAILED - Error chunking documents: {}", e.getMessage(), e);
                 throw new RuntimeException("Step 3 failed: " + e.getMessage(), e);
             }
@@ -131,6 +138,8 @@ public class WorkflowOrchestrator {
                 vectors = generateEmbeddings(chunks);
                 log.info("✓ Step 4 complete - Generated {} embeddings", vectors.size());
             } catch (Exception e) {
+                System.err.println("✗ STEP 4 FAILED - Error generating embeddings");
+                System.err.println("Error: " + e.getMessage());
                 log.error("✗ Step 4 FAILED - Error generating embeddings: {}", e.getMessage(), e);
                 throw new RuntimeException("Step 4 failed: " + e.getMessage(), e);
             }
@@ -141,6 +150,8 @@ public class WorkflowOrchestrator {
                 ensureCollection();
                 log.info("✓ Step 5 complete - Collection ready");
             } catch (Exception e) {
+                System.err.println("✗ STEP 5 FAILED - Error ensuring Milvus collection");
+                System.err.println("Error: " + e.getMessage());
                 log.error("✗ Step 5 FAILED - Error ensuring collection: {}", e.getMessage(), e);
                 throw new RuntimeException("Step 5 failed: " + e.getMessage(), e);
             }
@@ -151,6 +162,8 @@ public class WorkflowOrchestrator {
                 upsertVectors(vectors);
                 log.info("✓ Step 6 complete - Vectors upserted");
             } catch (Exception e) {
+                System.err.println("✗ STEP 6 FAILED - Error upserting vectors");
+                System.err.println("Error: " + e.getMessage());
                 log.error("✗ Step 6 FAILED - Error upserting vectors: {}", e.getMessage(), e);
                 throw new RuntimeException("Step 6 failed: " + e.getMessage(), e);
             }
@@ -162,12 +175,26 @@ public class WorkflowOrchestrator {
                     chunks.size(), vectors.size(), "SUCCESS", null);
 
         } catch (Exception e) {
+            // Print to System.err so it shows up prominently in CI logs (red/highlighted)
+            System.err.println("!!!!! WORKFLOW SYNC FAILED !!!!!");
+            System.err.println("Job ID: " + jobId);
+            System.err.println("Error: " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("Cause: " + e.getCause().getMessage());
+            }
+            e.printStackTrace(System.err);
+
             log.error("=== Sync workflow FAILED - Job ID: {} ===", jobId);
             log.error("Error details: {}", e.getMessage(), e);
             LocalDateTime endTime = LocalDateTime.now();
-            return buildResult(jobId, startTime, 0, 0, 0, 0, "FAILED",
-                    "Workflow failed: " + e.getMessage() + " (Cause: " +
-                    (e.getCause() != null ? e.getCause().getMessage() : "unknown") + ")");
+
+            // Build detailed error message
+            String errorDetails = "Workflow failed: " + e.getMessage();
+            if (e.getCause() != null) {
+                errorDetails += " (Cause: " + e.getCause().getMessage() + ")";
+            }
+
+            return buildResult(jobId, startTime, 0, 0, 0, 0, "FAILED", errorDetails);
         }
     }
 
