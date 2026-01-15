@@ -38,15 +38,6 @@ jobs:
         run: |
           echo "Checking if required secrets exist..."
           
-          if [ -z "${{ secrets.MILVUS_URI }}" ]; then
-            echo "❌ CRITICAL ERROR: MILVUS_URI secret is EMPTY or NOT FOUND!"
-            echo "Please go to: Repository Settings -> Secrets and variables -> Actions"
-            echo "And verify that MILVUS_URI is properly configured."
-            exit 1
-          else
-            echo "✅ MILVUS_URI is set"
-          fi
-          
           if [ -z "${{ secrets.REPOSYNC_GITHUB_TOKEN }}" ]; then
             echo "❌ CRITICAL ERROR: REPOSYNC_GITHUB_TOKEN secret is EMPTY!"
             exit 1
@@ -61,13 +52,21 @@ jobs:
             echo "✅ AZURE_OPENAI_API_KEY is set"
           fi
           
-          if [ -z "${{ secrets.MILVUS_COLLECTION_NAME }}" ]; then
-            echo "⚠️  WARNING: MILVUS_COLLECTION_NAME secret is EMPTY - will use default"
+          if [ -z "${{ secrets.AZURE_OPENAI_ENDPOINT }}" ]; then
+            echo "❌ CRITICAL ERROR: AZURE_OPENAI_ENDPOINT secret is EMPTY!"
+            exit 1
           else
-            echo "✅ MILVUS_COLLECTION_NAME is set"
+            echo "✅ AZURE_OPENAI_ENDPOINT is set"
+          fi
+          
+          if [ -z "${{ secrets.REPOSYNC_ORGANIZATION }}" ]; then
+            echo "⚠️  WARNING: REPOSYNC_ORGANIZATION secret is EMPTY - will sync all repos"
+          else
+            echo "✅ REPOSYNC_ORGANIZATION is set"
           fi
           
           echo "✅ All critical secrets are configured"
+          echo "ℹ️  Note: Using internal Docker Milvus (milvus-standalone) for CI runs"
 
       - name: Start Services with Docker Compose
         env:
@@ -78,8 +77,11 @@ jobs:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
-          MILVUS_URI: ${{ secrets.MILVUS_URI }}
-          MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
+
+          # CRITICAL: Use internal Docker network DNS for Milvus in CI
+          # milvus-standalone is the container name defined in docker-compose.yml
+          MILVUS_URI: http://milvus-standalone:19530
+          MILVUS_TOKEN: root:Milvus
           MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
         run: |
           echo "🐳 Starting all services with Docker Compose..."
