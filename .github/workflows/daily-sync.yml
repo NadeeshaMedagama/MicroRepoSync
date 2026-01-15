@@ -49,14 +49,16 @@ jobs:
           echo "MILVUS_COLLECTION_NAME=${{ secrets.MILVUS_COLLECTION_NAME }}" >> $GITHUB_ENV
 
       - name: Start GitHub Service
+        env:
+          GITHUB_TOKEN: ${{ secrets.REPOSYNC_GITHUB_TOKEN }}
         run: |
           cd github-service
-          nohup java -jar target/*.jar > github-service.log 2>&1 &
+          nohup java \
+            -Dgithub.token="$GITHUB_TOKEN" \
+            -Dserver.port=8081 \
+            -jar target/*.jar > github-service.log 2>&1 &
           echo $! > github-service.pid
           sleep 30
-        env:
-          REPOSYNC_GITHUB_TOKEN: ${{ secrets.REPOSYNC_GITHUB_TOKEN }}
-          SERVER_PORT: 8081
 
       - name: Verify GitHub Service Health
         run: |
@@ -75,11 +77,11 @@ jobs:
       - name: Start Document Processor Service
         run: |
           cd document-processor-service
-          nohup java -jar target/*.jar > processor-service.log 2>&1 &
+          nohup java \
+            -Dserver.port=8082 \
+            -jar target/*.jar > processor-service.log 2>&1 &
           echo $! > processor-service.pid
           sleep 20
-        env:
-          SERVER_PORT: 8082
 
       - name: Verify Document Processor Service Health
         run: |
@@ -96,16 +98,20 @@ jobs:
           exit 1
 
       - name: Start Embedding Service
+        env:
+          API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
         run: |
           cd embedding-service
-          nohup java -jar target/*.jar > embedding-service.log 2>&1 &
+          nohup java \
+            -Dazure.openai.api-key="$API_KEY" \
+            -Dazure.openai.endpoint="$ENDPOINT" \
+            -Dazure.openai.embeddings-deployment="$DEPLOYMENT" \
+            -Dserver.port=8083 \
+            -jar target/*.jar > embedding-service.log 2>&1 &
           echo $! > embedding-service.pid
           sleep 30
-        env:
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
-          SERVER_PORT: 8083
 
       - name: Verify Embedding Service Health
         run: |
@@ -122,16 +128,23 @@ jobs:
           exit 1
 
       - name: Start Milvus Service
+        env:
+          # Map secrets to shell variables for cleaner syntax
+          URI: ${{ secrets.MILVUS_URI }}
+          TOKEN: ${{ secrets.MILVUS_TOKEN }}
+          COLLECTION: ${{ secrets.MILVUS_COLLECTION_NAME }}
         run: |
           cd milvus-service
-          nohup java -jar target/*.jar > milvus-service.log 2>&1 &
+          # Use -D flags to inject values directly into Spring Boot
+          nohup java \
+            -Dmilvus.uri="$URI" \
+            -Dmilvus.token="$TOKEN" \
+            -Dmilvus.collection-name="$COLLECTION" \
+            -Dserver.port=8084 \
+            -jar target/*.jar > milvus-service.log 2>&1 &
+            
           echo $! > milvus-service.pid
           sleep 30
-        env:
-          MILVUS_URI: ${{ secrets.MILVUS_URI }}
-          MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
-          MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
-          SERVER_PORT: 8084
 
       - name: Verify Milvus Service Health
         run: |
@@ -148,20 +161,31 @@ jobs:
           exit 1
 
       - name: Start Orchestrator Service and Execute Sync
+        env:
+          # Milvus Secrets
+          URI: ${{ secrets.MILVUS_URI }}
+          TOKEN: ${{ secrets.MILVUS_TOKEN }}
+          COLLECTION: ${{ secrets.MILVUS_COLLECTION_NAME }}
+          # Orchestrator Secrets
+          ORG: ${{ secrets.REPOSYNC_ORGANIZATION }}
+          FILTER: ${{ secrets.REPOSYNC_FILTER_KEYWORD }}
         run: |
           cd orchestrator-service
-          nohup java -jar target/*.jar > orchestrator-service.log 2>&1 &
+          nohup java \
+            -Dmilvus.uri="$URI" \
+            -Dmilvus.token="$TOKEN" \
+            -Dmilvus.collection-name="$COLLECTION" \
+            -Dreposync.organization="$ORG" \
+            -Dreposync.filter-keyword="$FILTER" \
+            -Dservices.github.url="http://localhost:8081" \
+            -Dservices.processor.url="http://localhost:8082" \
+            -Dservices.embedding.url="http://localhost:8083" \
+            -Dservices.milvus.url="http://localhost:8084" \
+            -Dserver.port=8080 \
+            -jar target/*.jar > orchestrator-service.log 2>&1 &
+            
           echo $! > orchestrator-service.pid
           sleep 60
-        env:
-          REPOSYNC_ORGANIZATION: ${{ secrets.REPOSYNC_ORGANIZATION }}
-          REPOSYNC_FILTER_KEYWORD: ${{ secrets.REPOSYNC_FILTER_KEYWORD }}
-          MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
-          GITHUB_SERVICE_URL: "http://localhost:8081"
-          PROCESSOR_SERVICE_URL: "http://localhost:8082"
-          EMBEDDING_SERVICE_URL: "http://localhost:8083"
-          MILVUS_SERVICE_URL: "http://localhost:8084"
-          SERVER_PORT: 8080
 
       - name: Verify Orchestrator Service Health
         run: |
