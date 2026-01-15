@@ -122,14 +122,15 @@ jobs:
       - name: Start Milvus Service
         run: |
           cd milvus-service
+          export MILVUS_URI="${{ secrets.MILVUS_URI }}"
+          export MILVUS_COLLECTION_NAME="${{ secrets.MILVUS_COLLECTION_NAME }}"
+          export SERVER_PORT=8084
+          if [ -n "${{ secrets.MILVUS_TOKEN }}" ]; then
+            export MILVUS_TOKEN="${{ secrets.MILVUS_TOKEN }}"
+          fi
           nohup java -jar target/*.jar > milvus-service.log 2>&1 &
           echo $! > milvus-service.pid
           sleep 30
-        env:
-          MILVUS_URI: ${{ secrets.MILVUS_URI }}
-          MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
-          MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
-          SERVER_PORT: 8084
 
       - name: Verify Milvus Service Health
         run: |
