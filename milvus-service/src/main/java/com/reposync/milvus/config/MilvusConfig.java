@@ -9,70 +9,48 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class MilvusConfig {
 
-    @Value("${milvus.uri}")
+    // Default to empty string to avoid "Could not resolve placeholder" startup crashes
+    @Value("${milvus.uri:}")
     private String milvusUri;
 
-    @Value("${milvus.token:#{null}}")
+    @Value("${milvus.token:}")
     private String milvusToken;
 
     @Bean
     public MilvusServiceClient milvusClient() {
-        // 1. Validation check - fail fast with clear error message
-        if (milvusUri == null || milvusUri.isEmpty()) {
+        // 1. Fail fast with clear error message if configuration is missing
+        if (milvusUri == null || milvusUri.trim().isEmpty()) {
             throw new IllegalArgumentException(
-                "❌ Fatal: 'milvus.uri' is missing in configuration. Cannot create Milvus client. "
-                + "Please ensure MILVUS_URI secret is set in GitHub Actions or environment variables."
+                "❌ Fatal: 'milvus.uri' is not configured. " +
+                "Check that MILVUS_URI environment variable is set in docker-compose.yml or application.properties"
             );
         }
 
-        // 2. Parse URI to get host and port
-        String host = extractHost(milvusUri);
-        int port = extractPort(milvusUri);
+        System.out.println("✅ Connecting to Milvus URI: " + milvusUri);
 
-        System.out.println("✅ Connecting to Milvus at Host: " + host + ", Port: " + port);
-
+        // 2. Use the SDK's built-in URI parser (Safe & Standard)
+        // This automatically handles http://host:port format
         ConnectParam.Builder builder = ConnectParam.newBuilder()
-                .withHost(host)
-                .withPort(port);
+                .withUri(milvusUri);
 
-        // Add token only if provided and not empty
+        // 3. Add token only if provided and not empty
         if (milvusToken != null && !milvusToken.trim().isEmpty()) {
+            System.out.println("✅ Using Milvus authentication token");
             builder.withToken(milvusToken);
+        } else {
+            System.out.println("ℹ️  No Milvus token provided (using unauthenticated connection)");
         }
 
-        return new MilvusServiceClient(builder.build());
-    }
-
-    private String extractHost(String uri) {
-        if (uri == null || uri.isEmpty()) {
-            throw new IllegalArgumentException("URI cannot be null or empty");
+        try {
+            return new MilvusServiceClient(builder.build());
+        } catch (Exception e) {
+            // Catch SDK-specific errors (like bad URI format) and rethrow clearly
+            throw new IllegalStateException(
+                "Failed to initialize Milvus Client with URI: " + milvusUri +
+                ". Ensure the URI format is correct (e.g., http://host:port)",
+                e
+            );
         }
-        // Remove protocol if present
-        String cleanUri = uri.replaceFirst("^https?://", "");
-        // Get host part before port
-        int colonIndex = cleanUri.indexOf(':');
-        return colonIndex > 0 ? cleanUri.substring(0, colonIndex) : cleanUri;
-    }
-
-    private int extractPort(String uri) {
-        if (uri == null || uri.isEmpty()) {
-            throw new IllegalArgumentException("URI cannot be null or empty");
-        }
-        // Remove protocol if present
-        String cleanUri = uri.replaceFirst("^https?://", "");
-        // Get port part
-        int colonIndex = cleanUri.indexOf(':');
-        if (colonIndex > 0) {
-            String portStr = cleanUri.substring(colonIndex + 1);
-            // Remove any path after port
-            int slashIndex = portStr.indexOf('/');
-            if (slashIndex > 0) {
-                portStr = portStr.substring(0, slashIndex);
-            }
-            return Integer.parseInt(portStr);
-        }
-        // Default Milvus port
-        return 19530;
     }
 }
 
