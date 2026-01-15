@@ -12,7 +12,7 @@ public class MilvusConfig {
     @Value("${milvus.uri}")
     private String milvusUri;
 
-    @Value("${milvus.token}")
+    @Value("${milvus.token:#{null}}")
     private String milvusToken;
 
     @Bean
@@ -25,8 +25,8 @@ public class MilvusConfig {
                 .withHost(host)
                 .withPort(port);
 
-        // Add token if provided
-        if (milvusToken != null && !milvusToken.isEmpty()) {
+        // Add token only if provided and not empty
+        if (milvusToken != null && !milvusToken.trim().isEmpty()) {
             builder.withToken(milvusToken);
         }
 
