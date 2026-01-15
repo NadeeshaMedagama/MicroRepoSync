@@ -8,7 +8,7 @@ on:
 
 jobs:
   sync:
-    name: Execute RepoSync Workflow
+    name: Execute RepoSync with Docker Compose
     runs-on: ubuntu-latest
 
     steps:
@@ -34,250 +34,126 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Set up environment variables
+      - name: Verify Secrets Configuration
         run: |
-          echo "REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}" >> $GITHUB_ENV
-          echo "REPOSYNC_ORGANIZATION=${{ secrets.REPOSYNC_ORGANIZATION }}" >> $GITHUB_ENV
-          echo "REPOSYNC_FILTER_KEYWORD=${{ secrets.REPOSYNC_FILTER_KEYWORD }}" >> $GITHUB_ENV
-          echo "AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" >> $GITHUB_ENV
-          echo "AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" >> $GITHUB_ENV
-          echo "AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}" >> $GITHUB_ENV
-          echo "MILVUS_URI=${{ secrets.MILVUS_URI }}" >> $GITHUB_ENV
-          if [ -n "${{ secrets.MILVUS_TOKEN }}" ]; then
-            echo "MILVUS_TOKEN=${{ secrets.MILVUS_TOKEN }}" >> $GITHUB_ENV
-          fi
-          echo "MILVUS_COLLECTION_NAME=${{ secrets.MILVUS_COLLECTION_NAME }}" >> $GITHUB_ENV
-
-      - name: Start GitHub Service
-        env:
-          GITHUB_TOKEN: ${{ secrets.REPOSYNC_GITHUB_TOKEN }}
-        run: |
-          cd github-service
-          nohup java \
-            -Dgithub.token="$GITHUB_TOKEN" \
-            -Dserver.port=8081 \
-            -jar target/*.jar > github-service.log 2>&1 &
-          echo $! > github-service.pid
-          sleep 30
-
-      - name: Verify GitHub Service Health
-        run: |
-          for i in {1..30}; do
-            if curl -f http://localhost:8081/actuator/health > /dev/null 2>&1; then
-              echo "GitHub Service is healthy"
-              exit 0
-            fi
-            echo "Waiting for GitHub Service to be ready... ($i/30)"
-            sleep 2
-          done
-          echo "GitHub Service failed to start"
-          cat github-service/github-service.log
-          exit 1
-
-      - name: Start Document Processor Service
-        run: |
-          cd document-processor-service
-          nohup java \
-            -Dserver.port=8082 \
-            -jar target/*.jar > processor-service.log 2>&1 &
-          echo $! > processor-service.pid
-          sleep 20
-
-      - name: Verify Document Processor Service Health
-        run: |
-          for i in {1..30}; do
-            if curl -f http://localhost:8082/actuator/health > /dev/null 2>&1; then
-              echo "Document Processor Service is healthy"
-              exit 0
-            fi
-            echo "Waiting for Document Processor Service to be ready... ($i/30)"
-            sleep 2
-          done
-          echo "Document Processor Service failed to start"
-          cat document-processor-service/processor-service.log
-          exit 1
-
-      - name: Start Embedding Service
-        env:
-          API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
-        run: |
-          cd embedding-service
-          nohup java \
-            -Dazure.openai.api-key="$API_KEY" \
-            -Dazure.openai.endpoint="$ENDPOINT" \
-            -Dazure.openai.embeddings-deployment="$DEPLOYMENT" \
-            -Dserver.port=8083 \
-            -jar target/*.jar > embedding-service.log 2>&1 &
-          echo $! > embedding-service.pid
-          sleep 30
-
-      - name: Verify Embedding Service Health
-        run: |
-          for i in {1..30}; do
-            if curl -f http://localhost:8083/actuator/health > /dev/null 2>&1; then
-              echo "Embedding Service is healthy"
-              exit 0
-            fi
-            echo "Waiting for Embedding Service to be ready... ($i/30)"
-            sleep 2
-          done
-          echo "Embedding Service failed to start"
-          cat embedding-service/embedding-service.log
-          exit 1
-
-      - name: Debug Secrets (Masked)
-        run: |
-          echo "Checking if secrets exist..."
+          echo "Checking if required secrets exist..."
+          
           if [ -z "${{ secrets.MILVUS_URI }}" ]; then
             echo "❌ CRITICAL ERROR: MILVUS_URI secret is EMPTY or NOT FOUND!"
             echo "Please go to: Repository Settings -> Secrets and variables -> Actions"
             echo "And verify that MILVUS_URI is properly configured."
             exit 1
           else
-            echo "✅ MILVUS_URI is set (Length: ${#MILVUS_URI})"
+            echo "✅ MILVUS_URI is set"
+          fi
+          
+          if [ -z "${{ secrets.REPOSYNC_GITHUB_TOKEN }}" ]; then
+            echo "❌ CRITICAL ERROR: REPOSYNC_GITHUB_TOKEN secret is EMPTY!"
+            exit 1
+          else
+            echo "✅ REPOSYNC_GITHUB_TOKEN is set"
+          fi
+          
+          if [ -z "${{ secrets.AZURE_OPENAI_API_KEY }}" ]; then
+            echo "❌ CRITICAL ERROR: AZURE_OPENAI_API_KEY secret is EMPTY!"
+            exit 1
+          else
+            echo "✅ AZURE_OPENAI_API_KEY is set"
           fi
           
           if [ -z "${{ secrets.MILVUS_COLLECTION_NAME }}" ]; then
-            echo "⚠️  WARNING: MILVUS_COLLECTION_NAME secret is EMPTY - will use default 'reposync_collection'"
+            echo "⚠️  WARNING: MILVUS_COLLECTION_NAME secret is EMPTY - will use default"
           else
-            echo "✅ MILVUS_COLLECTION_NAME is set (Length: ${#COLLECTION})"
+            echo "✅ MILVUS_COLLECTION_NAME is set"
           fi
           
-          if [ -z "${{ secrets.MILVUS_TOKEN }}" ]; then
-            echo "ℹ️  INFO: MILVUS_TOKEN is not set (this may be optional)"
-          else
-            echo "✅ MILVUS_TOKEN is set"
-          fi
+          echo "✅ All critical secrets are configured"
+
+      - name: Start Services with Docker Compose
         env:
+          # Pass all secrets as environment variables for Docker Compose
+          REPOSYNC_GITHUB_TOKEN: ${{ secrets.REPOSYNC_GITHUB_TOKEN }}
+          REPOSYNC_ORGANIZATION: ${{ secrets.REPOSYNC_ORGANIZATION }}
+          REPOSYNC_FILTER_KEYWORD: ${{ secrets.REPOSYNC_FILTER_KEYWORD }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
           MILVUS_URI: ${{ secrets.MILVUS_URI }}
-          COLLECTION: ${{ secrets.MILVUS_COLLECTION_NAME }}
-
-      - name: Start Milvus Service
-        env:
-          # Check if secrets exist before starting
-          URI_CHECK: ${{ secrets.MILVUS_URI }}
-
-          # Inject configuration via JSON (Safest method - bypasses shell quoting issues)
-          SPRING_APPLICATION_JSON: >-
-            {
-              "milvus": {
-                "uri": "${{ secrets.MILVUS_URI }}",
-                "token": "${{ secrets.MILVUS_TOKEN }}",
-                "collection-name": "${{ secrets.MILVUS_COLLECTION_NAME }}"
-              },
-              "server": {
-                "port": 8084
-              }
-            }
+          MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
+          MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
         run: |
-          # 1. Debugging: Fail fast if secrets are missing
-          if [ -z "$URI_CHECK" ]; then
-            echo "❌ ERROR: MILVUS_URI secret is empty! Go to GitHub Repo Settings -> Secrets to fix this."
-            exit 1
-          fi
+          echo "🐳 Starting all services with Docker Compose..."
+          echo "This will build images and start services with proper health checks"
           
-          echo "✅ MILVUS_URI is found. Starting service..."
+          # Start only the required services (not monitoring/prometheus/grafana for CI)
+          docker compose up -d \
+            github-service \
+            document-processor-service \
+            embedding-service \
+            milvus-etcd \
+            milvus-minio \
+            milvus-standalone \
+            milvus-service \
+            orchestrator-service
           
-          cd milvus-service
-          nohup java -jar target/*.jar > milvus-service.log 2>&1 &
-          echo $! > milvus-service.pid
-          sleep 30
+          echo "✅ Docker Compose services started"
 
-      - name: Verify Milvus Service Health
+      - name: Wait for Services to be Healthy
         run: |
-          for i in {1..30}; do
-            if curl -f http://localhost:8084/actuator/health > /dev/null 2>&1; then
-              echo "Milvus Service is healthy"
+          echo "⏳ Waiting for Orchestrator Service to become healthy..."
+          echo "Note: Orchestrator won't be healthy until all dependencies are healthy"
+          
+          # Wait up to 5 minutes for orchestrator to be healthy
+          TIMEOUT=300
+          ELAPSED=0
+          
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "✅ Orchestrator Service is healthy!"
+              echo ""
+              echo "Verifying all services are responding:"
+              
+              echo "  1. GitHub Service (8081):"
+              curl -sf http://localhost:8081/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
+              
+              echo "  2. Document Processor Service (8082):"
+              curl -sf http://localhost:8082/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
+              
+              echo "  3. Embedding Service (8083):"
+              curl -sf http://localhost:8083/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
+              
+              echo "  4. Milvus Service (8084):"
+              curl -sf http://localhost:8084/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
+              
+              echo "  5. Orchestrator Service (8080):"
+              curl -sf http://localhost:8080/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
+              
+              echo ""
+              echo "✅ All services are ready!"
               exit 0
             fi
-            echo "Waiting for Milvus Service to be ready... ($i/30)"
-            sleep 2
+            
+            echo "Waiting for services to be ready... (${ELAPSED}s / ${TIMEOUT}s)"
+            sleep 10
+            ELAPSED=$((ELAPSED + 10))
           done
-          echo "Milvus Service failed to start"
-          cat milvus-service/milvus-service.log
+          
+          echo "❌ Timeout reached! Services failed to become healthy within ${TIMEOUT}s"
+          echo ""
+          echo "=== Docker Compose Status ==="
+          docker compose ps
+          echo ""
+          echo "=== Orchestrator Logs (last 100 lines) ==="
+          docker compose logs --tail=100 orchestrator-service
+          echo ""
+          echo "=== Milvus Service Logs (last 100 lines) ==="
+          docker compose logs --tail=100 milvus-service
           exit 1
-
-      - name: Start Orchestrator Service and Execute Sync
-        env:
-          # Inject configuration via JSON (Safest method)
-          SPRING_APPLICATION_JSON: >-
-            {
-              "milvus": {
-                "uri": "${{ secrets.MILVUS_URI }}",
-                "token": "${{ secrets.MILVUS_TOKEN }}",
-                "collection-name": "${{ secrets.MILVUS_COLLECTION_NAME }}"
-              },
-              "reposync": {
-                "organization": "${{ secrets.REPOSYNC_ORGANIZATION }}",
-                "filter-keyword": "${{ secrets.REPOSYNC_FILTER_KEYWORD }}"
-              },
-              "services": {
-                "github": {
-                  "url": "http://localhost:8081"
-                },
-                "processor": {
-                  "url": "http://localhost:8082"
-                },
-                "embedding": {
-                  "url": "http://localhost:8083"
-                },
-                "milvus": {
-                  "url": "http://localhost:8084"
-                }
-              },
-              "server": {
-                "port": 8080
-              }
-            }
-        run: |
-          echo "✅ Starting Orchestrator Service with JSON configuration..."
-          
-          cd orchestrator-service
-          nohup java -jar target/*.jar > orchestrator-service.log 2>&1 &
-          echo $! > orchestrator-service.pid
-          sleep 60
-
-      - name: Verify Orchestrator Service Health
-        run: |
-          for i in {1..30}; do
-            if curl -f http://localhost:8080/actuator/health > /dev/null 2>&1; then
-              echo "Orchestrator Service is healthy"
-              exit 0
-            fi
-            echo "Waiting for Orchestrator Service to be ready... ($i/30)"
-            sleep 2
-          done
-          echo "Orchestrator Service failed to start"
-          cat orchestrator-service/orchestrator-service.log
-          exit 1
-
-      - name: Verify All Services Connectivity
-        run: |
-          echo "=== Checking All Services ==="
-          
-          echo "1. GitHub Service (8081):"
-          curl -f http://localhost:8081/actuator/health || echo "❌ Failed"
-          
-          echo "2. Document Processor Service (8082):"
-          curl -f http://localhost:8082/actuator/health || echo "❌ Failed"
-          
-          echo "3. Embedding Service (8083):"
-          curl -f http://localhost:8083/actuator/health || echo "❌ Failed"
-          
-          echo "4. Milvus Service (8084):"
-          curl -f http://localhost:8084/actuator/health || echo "❌ Failed"
-          
-          echo "5. Orchestrator Service (8080):"
-          curl -f http://localhost:8080/actuator/health || echo "❌ Failed"
-          
-          echo "=== All services checked ==="
 
       - name: Trigger Sync Job
         run: |
-          sleep 10
-          echo "Triggering sync job..."
+          echo "🚀 Triggering repository sync job..."
+          
           HTTP_CODE=$(curl -s -w "%{http_code}" -X POST http://localhost:8080/api/orchestrator/sync \
             -H "Content-Type: application/json" \
             -o sync-result.json)
@@ -285,96 +161,98 @@ jobs:
           echo "HTTP Response Code: $HTTP_CODE"
           
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "Error: Sync API returned HTTP $HTTP_CODE"
+            echo "❌ Error: Sync API returned HTTP $HTTP_CODE"
+            echo ""
             echo "Response body:"
             cat sync-result.json || echo "No response body"
             echo ""
-            echo "=== Orchestrator Service Logs ==="
-            tail -200 orchestrator-service/orchestrator-service.log || echo "No logs available"
+            echo "=== Orchestrator Service Logs (last 200 lines) ==="
+            docker compose logs --tail=200 orchestrator-service
             exit 1
           fi
           
-          echo "Sync job response:"
+          echo "Sync job initiated successfully"
+          echo ""
+          echo "Initial response:"
           cat sync-result.json
+          echo ""
           
           # Give the sync job time to complete
-          echo "Waiting for sync to complete..."
+          echo "⏳ Waiting for sync to complete (60 seconds)..."
           sleep 60
 
       - name: Check Sync Status
         run: |
           if [ ! -f sync-result.json ]; then
-            echo "Error: sync-result.json not found"
+            echo "❌ Error: sync-result.json not found"
             exit 1
           fi
           
-          # 1. Always print the raw JSON first so we see the error message
           echo "=== Sync Result JSON ==="
           cat sync-result.json
           echo "========================"
           echo ""
           
-          # 2. Extract fields
+          # Extract status
           STATUS=$(jq -r '.status' sync-result.json)
           ERROR_MSG=$(jq -r '.errorMessage' sync-result.json)
           
-          # 3. Check Status
           if [ "$STATUS" != "SUCCESS" ]; then
-            echo "❌ Sync Logic Failed!"
+            echo "❌ Sync Failed!"
             echo "Status: $STATUS"
-            echo "Reason: $ERROR_MSG"
-            
+            echo "Error: $ERROR_MSG"
             echo ""
-            echo "=== Tailing Service Logs for Debugging ==="
-            # Print the last 150 lines of the Orchestrator log specifically
-            # because that is where the Java Exception stack trace lives.
-            echo "--- Orchestrator Logs (last 150 lines) ---"
-            tail -n 150 orchestrator-service/orchestrator-service.log
-            
+            echo "=== Debugging Information ==="
             echo ""
-            echo "--- GitHub Service Logs (last 50 lines) ---"
-            tail -n 50 github-service/github-service.log || echo "No github service logs"
-            
+            echo "--- Orchestrator Logs (last 200 lines) ---"
+            docker compose logs --tail=200 orchestrator-service
             echo ""
-            echo "--- Embedding Service Logs (last 50 lines) ---"
-            tail -n 50 embedding-service/embedding-service.log || echo "No embedding service logs"
-            
+            echo "--- GitHub Service Logs (last 100 lines) ---"
+            docker compose logs --tail=100 github-service
             echo ""
-            echo "--- Milvus Service Logs (last 50 lines) ---"
-            tail -n 50 milvus-service/milvus-service.log || echo "No milvus service logs"
-            
-            # Fail the build
+            echo "--- Embedding Service Logs (last 100 lines) ---"
+            docker compose logs --tail=100 embedding-service
+            echo ""
+            echo "--- Milvus Service Logs (last 100 lines) ---"
+            docker compose logs --tail=100 milvus-service
+            echo ""
             exit 1
           fi
           
-          # 4. Success case - show statistics
+          # Success - show statistics
           REPOS=$(jq -r '.repositoriesProcessed // 0' sync-result.json)
           DOCS=$(jq -r '.documentsProcessed // 0' sync-result.json)
           CHUNKS=$(jq -r '.chunksCreated // 0' sync-result.json)
           VECTORS=$(jq -r '.vectorsStored // 0' sync-result.json)
           
-          echo "✅ Sync Success!"
+          echo "✅ Sync Completed Successfully!"
+          echo ""
           echo "📊 Statistics:"
           echo "  • Repositories processed: $REPOS"
           echo "  • Documents processed: $DOCS"
           echo "  • Chunks created: $CHUNKS"
           echo "  • Vectors stored: $VECTORS"
 
-      - name: Upload logs
+      - name: Save Docker Logs
+        if: always()
+        run: |
+          echo "📝 Saving complete Docker logs..."
+          docker compose logs > docker-compose-logs.txt
+          echo "Logs saved to docker-compose-logs.txt"
+
+      - name: Upload Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: service-logs
+          name: sync-logs-and-results
           path: |
-            *-service/*.log
             sync-result.json
+            docker-compose-logs.txt
 
       - name: Cleanup
         if: always()
         run: |
-          for service in github-service document-processor-service embedding-service milvus-service orchestrator-service; do
-            if [ -f $service/$service.pid ]; then
-              kill $(cat $service/$service.pid) || true
-            fi
-          done
+          echo "🧹 Cleaning up Docker Compose services..."
+          docker compose down -v
+          echo "✅ Cleanup complete"
 
