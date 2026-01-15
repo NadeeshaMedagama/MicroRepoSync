@@ -69,7 +69,8 @@ services:
     networks:
       - reposync-network
     depends_on:
-      - milvus-standalone
+      milvus-standalone:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
       interval: 30s
@@ -95,10 +96,14 @@ services:
     networks:
       - reposync-network
     depends_on:
-      - github-service
-      - document-processor-service
-      - embedding-service
-      - milvus-service
+      github-service:
+        condition: service_healthy
+      document-processor-service:
+        condition: service_healthy
+      embedding-service:
+        condition: service_healthy
+      milvus-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
