@@ -127,6 +127,33 @@ jobs:
           cat embedding-service/embedding-service.log
           exit 1
 
+      - name: Debug Secrets (Masked)
+        run: |
+          echo "Checking if secrets exist..."
+          if [ -z "${{ secrets.MILVUS_URI }}" ]; then
+            echo "❌ CRITICAL ERROR: MILVUS_URI secret is EMPTY or NOT FOUND!"
+            echo "Please go to: Repository Settings -> Secrets and variables -> Actions"
+            echo "And verify that MILVUS_URI is properly configured."
+            exit 1
+          else
+            echo "✅ MILVUS_URI is set (Length: ${#MILVUS_URI})"
+          fi
+          
+          if [ -z "${{ secrets.MILVUS_COLLECTION_NAME }}" ]; then
+            echo "⚠️  WARNING: MILVUS_COLLECTION_NAME secret is EMPTY - will use default 'reposync_collection'"
+          else
+            echo "✅ MILVUS_COLLECTION_NAME is set (Length: ${#COLLECTION})"
+          fi
+          
+          if [ -z "${{ secrets.MILVUS_TOKEN }}" ]; then
+            echo "ℹ️  INFO: MILVUS_TOKEN is not set (this may be optional)"
+          else
+            echo "✅ MILVUS_TOKEN is set"
+          fi
+        env:
+          MILVUS_URI: ${{ secrets.MILVUS_URI }}
+          COLLECTION: ${{ secrets.MILVUS_COLLECTION_NAME }}
+
       - name: Start Milvus Service
         env:
           # Map secrets to shell variables for cleaner syntax
