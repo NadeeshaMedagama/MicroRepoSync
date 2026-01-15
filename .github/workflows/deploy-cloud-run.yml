@@ -88,21 +88,25 @@ jobs:
       - name: Deploy to Cloud Run
         if: steps.check-auth.outputs.authenticated == 'true'
         run: |
+          ENV_VARS="REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}"
+          ENV_VARS="${ENV_VARS},REPOSYNC_ORGANIZATION=${{ secrets.REPOSYNC_ORGANIZATION }}"
+          ENV_VARS="${ENV_VARS},REPOSYNC_FILTER_KEYWORD=${{ secrets.REPOSYNC_FILTER_KEYWORD }}"
+          ENV_VARS="${ENV_VARS},AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}"
+          ENV_VARS="${ENV_VARS},AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}"
+          ENV_VARS="${ENV_VARS},AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}"
+          ENV_VARS="${ENV_VARS},MILVUS_URI=${{ secrets.MILVUS_URI }}"
+          if [ -n "${{ secrets.MILVUS_TOKEN }}" ]; then
+            ENV_VARS="${ENV_VARS},MILVUS_TOKEN=${{ secrets.MILVUS_TOKEN }}"
+          fi
+          ENV_VARS="${ENV_VARS},MILVUS_COLLECTION_NAME=${{ secrets.MILVUS_COLLECTION_NAME }}"
+          
           gcloud run deploy ${{ matrix.service.name }} \
             --image gcr.io/$PROJECT_ID/${{ matrix.service.name }}:$GITHUB_SHA \
             --platform managed \
             --region $REGION \
             --allow-unauthenticated \
             --port ${{ matrix.service.port }} \
-            --set-env-vars="REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}" \
-            --set-env-vars="REPOSYNC_ORGANIZATION=${{ secrets.REPOSYNC_ORGANIZATION }}" \
-            --set-env-vars="REPOSYNC_FILTER_KEYWORD=${{ secrets.REPOSYNC_FILTER_KEYWORD }}" \
-            --set-env-vars="AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" \
-            --set-env-vars="AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
-            --set-env-vars="AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}" \
-            --set-env-vars="MILVUS_URI=${{ secrets.MILVUS_URI }}" \
-            --set-env-vars="MILVUS_TOKEN=${{ secrets.MILVUS_TOKEN }}" \
-            --set-env-vars="MILVUS_COLLECTION_NAME=${{ secrets.MILVUS_COLLECTION_NAME }}" \
+            --set-env-vars="${ENV_VARS}" \
             --memory 2Gi \
             --cpu 2 \
             --min-instances 0 \
