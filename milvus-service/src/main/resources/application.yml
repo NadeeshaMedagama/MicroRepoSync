@@ -7,7 +7,7 @@ spring:
 
 milvus:
   uri: ${MILVUS_URI}
-  token: ${MILVUS_TOKEN:}
+  token: ${MILVUS_TOKEN:#{null}}
   collection-name: ${MILVUS_COLLECTION_NAME:reposync_collection}
 
 management:
