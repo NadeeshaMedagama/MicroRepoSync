@@ -156,20 +156,32 @@ jobs:
 
       - name: Start Milvus Service
         env:
-          # Map secrets to shell variables for cleaner syntax
-          URI: ${{ secrets.MILVUS_URI }}
-          TOKEN: ${{ secrets.MILVUS_TOKEN }}
-          COLLECTION: ${{ secrets.MILVUS_COLLECTION_NAME }}
+          # Check if secrets exist before starting
+          URI_CHECK: ${{ secrets.MILVUS_URI }}
+
+          # Inject configuration via JSON (Safest method - bypasses shell quoting issues)
+          SPRING_APPLICATION_JSON: >-
+            {
+              "milvus": {
+                "uri": "${{ secrets.MILVUS_URI }}",
+                "token": "${{ secrets.MILVUS_TOKEN }}",
+                "collection-name": "${{ secrets.MILVUS_COLLECTION_NAME }}"
+              },
+              "server": {
+                "port": 8084
+              }
+            }
         run: |
+          # 1. Debugging: Fail fast if secrets are missing
+          if [ -z "$URI_CHECK" ]; then
+            echo "❌ ERROR: MILVUS_URI secret is empty! Go to GitHub Repo Settings -> Secrets to fix this."
+            exit 1
+          fi
+          
+          echo "✅ MILVUS_URI is found. Starting service..."
+          
           cd milvus-service
-          # Use -D flags to inject values directly into Spring Boot
-          nohup java \
-            -Dmilvus.uri="$URI" \
-            -Dmilvus.token="$TOKEN" \
-            -Dmilvus.collection-name="$COLLECTION" \
-            -Dserver.port=8084 \
-            -jar target/*.jar > milvus-service.log 2>&1 &
-            
+          nohup java -jar target/*.jar > milvus-service.log 2>&1 &
           echo $! > milvus-service.pid
           sleep 30
 
@@ -189,28 +201,41 @@ jobs:
 
       - name: Start Orchestrator Service and Execute Sync
         env:
-          # Milvus Secrets
-          URI: ${{ secrets.MILVUS_URI }}
-          TOKEN: ${{ secrets.MILVUS_TOKEN }}
-          COLLECTION: ${{ secrets.MILVUS_COLLECTION_NAME }}
-          # Orchestrator Secrets
-          ORG: ${{ secrets.REPOSYNC_ORGANIZATION }}
-          FILTER: ${{ secrets.REPOSYNC_FILTER_KEYWORD }}
+          # Inject configuration via JSON (Safest method)
+          SPRING_APPLICATION_JSON: >-
+            {
+              "milvus": {
+                "uri": "${{ secrets.MILVUS_URI }}",
+                "token": "${{ secrets.MILVUS_TOKEN }}",
+                "collection-name": "${{ secrets.MILVUS_COLLECTION_NAME }}"
+              },
+              "reposync": {
+                "organization": "${{ secrets.REPOSYNC_ORGANIZATION }}",
+                "filter-keyword": "${{ secrets.REPOSYNC_FILTER_KEYWORD }}"
+              },
+              "services": {
+                "github": {
+                  "url": "http://localhost:8081"
+                },
+                "processor": {
+                  "url": "http://localhost:8082"
+                },
+                "embedding": {
+                  "url": "http://localhost:8083"
+                },
+                "milvus": {
+                  "url": "http://localhost:8084"
+                }
+              },
+              "server": {
+                "port": 8080
+              }
+            }
         run: |
+          echo "✅ Starting Orchestrator Service with JSON configuration..."
+          
           cd orchestrator-service
-          nohup java \
-            -Dmilvus.uri="$URI" \
-            -Dmilvus.token="$TOKEN" \
-            -Dmilvus.collection-name="$COLLECTION" \
-            -Dreposync.organization="$ORG" \
-            -Dreposync.filter-keyword="$FILTER" \
-            -Dservices.github.url="http://localhost:8081" \
-            -Dservices.processor.url="http://localhost:8082" \
-            -Dservices.embedding.url="http://localhost:8083" \
-            -Dservices.milvus.url="http://localhost:8084" \
-            -Dserver.port=8080 \
-            -jar target/*.jar > orchestrator-service.log 2>&1 &
-            
+          nohup java -jar target/*.jar > orchestrator-service.log 2>&1 &
           echo $! > orchestrator-service.pid
           sleep 60
 
