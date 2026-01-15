@@ -17,9 +17,19 @@ public class MilvusConfig {
 
     @Bean
     public MilvusServiceClient milvusClient() {
-        // Parse URI to get host and port
+        // 1. Validation check - fail fast with clear error message
+        if (milvusUri == null || milvusUri.isEmpty()) {
+            throw new IllegalArgumentException(
+                "❌ Fatal: 'milvus.uri' is missing in configuration. Cannot create Milvus client. "
+                + "Please ensure MILVUS_URI secret is set in GitHub Actions or environment variables."
+            );
+        }
+
+        // 2. Parse URI to get host and port
         String host = extractHost(milvusUri);
         int port = extractPort(milvusUri);
+
+        System.out.println("✅ Connecting to Milvus at Host: " + host + ", Port: " + port);
 
         ConnectParam.Builder builder = ConnectParam.newBuilder()
                 .withHost(host)
@@ -34,6 +44,9 @@ public class MilvusConfig {
     }
 
     private String extractHost(String uri) {
+        if (uri == null || uri.isEmpty()) {
+            throw new IllegalArgumentException("URI cannot be null or empty");
+        }
         // Remove protocol if present
         String cleanUri = uri.replaceFirst("^https?://", "");
         // Get host part before port
@@ -42,6 +55,9 @@ public class MilvusConfig {
     }
 
     private int extractPort(String uri) {
+        if (uri == null || uri.isEmpty()) {
+            throw new IllegalArgumentException("URI cannot be null or empty");
+        }
         // Remove protocol if present
         String cleanUri = uri.replaceFirst("^https?://", "");
         // Get port part
