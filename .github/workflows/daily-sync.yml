@@ -78,23 +78,19 @@ jobs:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
 
-          # CRITICAL: Use internal Docker network DNS for Milvus in CI
-          # milvus-standalone is the container name defined in docker-compose.yml
-          MILVUS_URI: http://milvus-standalone:19530
-          MILVUS_TOKEN: root:Milvus
+          # Use Zilliz Cloud (cloud Milvus) from secrets
+          MILVUS_URI: ${{ secrets.MILVUS_URI }}
+          MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
           MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
         run: |
           echo "🐳 Starting all services with Docker Compose..."
           echo "This will build images and start services with proper health checks"
           
-          # Start only the required services (not monitoring/prometheus/grafana for CI)
+          # Start only application services (using Zilliz Cloud for Milvus, not local containers)
           docker compose up -d \
             github-service \
             document-processor-service \
             embedding-service \
-            milvus-etcd \
-            milvus-minio \
-            milvus-standalone \
             milvus-service \
             orchestrator-service
           
