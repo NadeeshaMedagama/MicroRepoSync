@@ -183,7 +183,7 @@ Service integration testing and verification documentation.
 
 ### Start the Application
 ```bash
-# See: setup-guides/QUICKSTART.md
+# See: setup-guides/QUICKSTART-NEW.md
 docker-compose up -d
 ```
 
