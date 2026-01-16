@@ -45,11 +45,13 @@ This project follows a microservices architecture with six independent services 
 
 4. **Milvus Service** (Port 8084)
    - Manages Milvus vector database collections
+   - **Automatic collection creation** if it doesn't exist
    - Handles vector upserts and schema management
-   - Automatic collection creation with proper indexing
+   - Works with cloud Milvus (Zilliz)
 
 5. **Orchestrator Service** (Port 8080)
    - Coordinates the entire sync workflow
+   - **Auto-sync on startup** (configurable, enabled by default)
    - Scheduled execution (daily at 8:00 AM)
    - Manual trigger via REST API
    - Resilience with retry logic
@@ -76,7 +78,10 @@ This project follows a microservices architecture with six independent services 
 
 ## 🚀 Features
 
-- ✅ **Automated Daily Sync**: Runs at 8:00 AM every day via GitHub Actions
+- ✅ **Auto-Sync on Startup**: Automatically fetches and syncs repositories when application starts
+- ✅ **Automatic Collection Creation**: Milvus collection created automatically if it doesn't exist
+- ✅ **Automated Daily Sync**: Runs at 8:00 AM every day via scheduled task and GitHub Actions
+- ✅ **Cloud-Native Vector Storage**: Uses Zilliz cloud Milvus (no local database required)
 - ✅ **Microservices Architecture**: Independent, scalable services following SOLID principles
 - ✅ **Complete Monitoring System**: Prometheus + Grafana with custom monitoring service
 - ✅ **Real-time Dashboards**: 8 pre-configured Grafana panels for all metrics
@@ -93,11 +98,10 @@ This project follows a microservices architecture with six independent services 
 
 - Java 21 (OpenJDK 21 or higher)
 - Maven 3.6+
-- Docker and Docker Compose (optional but recommended)
-- Kubernetes cluster (for production deployment)
+- Docker and Docker Compose
 - GitHub Personal Access Token
 - Azure OpenAI API access
-- Milvus instance (cloud or self-hosted)
+- **Cloud Milvus instance** (Zilliz Cloud recommended)
 
 ## 🛠️ Setup
 
@@ -119,15 +123,23 @@ cp .env.example .env
 Edit `.env` and fill in your credentials:
 
 ```env
+# GitHub Configuration
 REPOSYNC_GITHUB_TOKEN=ghp_your_token_here
 REPOSYNC_ORGANIZATION=your-org-name
 REPOSYNC_FILTER_KEYWORD=microservices
+
+# Azure OpenAI Configuration
 AZURE_OPENAI_API_KEY=your-azure-openai-key
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=text-embedding-ada-002
-MILVUS_URI=localhost:19530
-MILVUS_TOKEN=
+
+# Cloud Milvus (Zilliz) Configuration
+MILVUS_URI=https://your-instance.vectordb.xxxxxxxxxx.com:19530
+MILVUS_TOKEN=your-zilliz-token
 MILVUS_COLLECTION_NAME=reposync_collection
+
+# Auto-Sync Configuration (Optional)
+REPOSYNC_AUTO_SYNC_ON_STARTUP=true  # Default: true
 ```
 
 ### 3. Build the Project
@@ -142,16 +154,49 @@ mvn clean package -DskipTests -Dcheckstyle.skip=true
 
 ## 🏃 Running Locally
 
-### Option 1: Using Docker Compose (Recommended)
+### Quick Start with Auto-Sync (Recommended)
+
+The easiest way to run the application is using the start script, which handles everything automatically:
 
 ```bash
-# Start all services including Milvus and monitoring stack
-docker-compose up -d
+# Run this single command - everything is automatic!
+./scripts/start-local.sh
+
+# The script will:
+# 1. Check prerequisites (Java 21, Maven, Docker)
+# 2. Validate your .env configuration
+# 3. Build all services
+# 4. Start Docker Compose
+# 5. Wait for services to be healthy
+# 6. Auto-sync triggers automatically after 5 seconds!
+
+# Verify auto-sync is working
+./scripts/verify-auto-sync.sh
+
+# Watch live sync progress
+docker compose logs -f orchestrator-service
+```
+
+**What happens automatically:**
+- ✅ Fetches all repositories from your GitHub organization
+- ✅ Extracts documents from each repository
+- ✅ Chunks documents for optimal embedding
+- ✅ Generates embeddings using Azure OpenAI
+- ✅ **Creates Milvus collection if it doesn't exist**
+- ✅ Stores all vectors in your cloud Milvus collection
+
+### Option 1: Using Docker Compose
+
+```bash
+# Start all services including monitoring stack
+docker compose up -d
+
+# Auto-sync will trigger automatically in 5 seconds after startup!
 
 # Check logs
-docker-compose logs -f
+docker compose logs -f
 
-# Trigger manual sync
+# (Optional) Manually trigger sync if needed
 curl -X POST http://localhost:8080/api/orchestrator/sync
 
 # Access monitoring interfaces
@@ -160,7 +205,7 @@ curl -X POST http://localhost:8080/api/orchestrator/sync
 # Monitoring API: http://localhost:8085/api/monitoring
 
 # Stop all services
-docker-compose down
+docker compose down
 ```
 
 ### Option 2: Running Individual Services
@@ -187,6 +232,26 @@ mvn spring-boot:run
 # Terminal 5 - Orchestrator Service
 cd orchestrator-service
 mvn spring-boot:run
+
+# Note: Auto-sync will trigger when orchestrator starts!
+```
+
+### Disabling Auto-Sync (Optional)
+
+If you prefer to trigger sync manually:
+
+```bash
+# Set environment variable before starting
+export REPOSYNC_AUTO_SYNC_ON_STARTUP=false
+
+# Then start services
+./scripts/start-local.sh
+
+# Or with Docker Compose
+docker compose restart orchestrator-service
+
+# Manually trigger sync when needed
+curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'
 ```
 
 ## ☁️ Deploying to Kubernetes
@@ -286,8 +351,15 @@ Edit `orchestrator-service/src/main/resources/application.yml`:
 
 ```yaml
 reposync:
+  auto-sync-on-startup: true  # Enable/disable auto-sync on startup
   schedule:
     cron: "0 0 8 * * *"  # Daily at 8:00 AM
+```
+
+Or use environment variable:
+
+```bash
+export REPOSYNC_AUTO_SYNC_ON_STARTUP=false  # Disable auto-sync
 ```
 
 ## 📊 Monitoring & Observability
@@ -530,6 +602,50 @@ mvn test
 4. **Generate Embeddings**: Azure OpenAI creates vector embeddings
 5. **Store in Milvus**: Vectors with metadata are stored in Milvus collection
 
+## ⚡ Auto-Sync Feature
+
+### How It Works
+
+When you run `./scripts/start-local.sh`, the system automatically:
+
+1. **Starts All Services** - Docker Compose brings up all microservices
+2. **Waits for Health** - Ensures all services are ready (health checks pass)
+3. **Triggers Sync** - After 5 seconds, the orchestrator automatically initiates sync
+4. **Fetches Data** - Retrieves all repositories from your GitHub organization
+5. **Processes Documents** - Extracts, chunks, and embeds all documents
+6. **Creates Collection** - If the Milvus collection doesn't exist, creates it automatically
+7. **Stores Vectors** - Upserts all embeddings to your cloud Milvus collection
+
+### Quick Commands
+
+```bash
+# Start with auto-sync (default)
+./scripts/start-local.sh
+
+# Verify auto-sync status
+./scripts/verify-auto-sync.sh
+
+# Watch sync progress
+docker compose logs -f orchestrator-service
+
+# Disable auto-sync
+export REPOSYNC_AUTO_SYNC_ON_STARTUP=false
+docker compose restart orchestrator-service
+
+# Manually trigger sync
+curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'
+```
+
+### Benefits
+
+- ✅ **Zero Manual Steps** - Just run one script
+- ✅ **Immediate Data** - Your vector database is populated on first startup
+- ✅ **Auto-Recovery** - Collection created if missing
+- ✅ **Scheduled Updates** - Daily sync at 8:00 AM keeps data fresh
+- ✅ **Cloud-Native** - Works with Zilliz cloud Milvus
+
+For detailed documentation, see [AUTO_SYNC_IMPLEMENTATION.md](AUTO_SYNC_IMPLEMENTATION.md).
+
 ## 🐛 Troubleshooting
 
 ### Service won't start
@@ -558,15 +674,19 @@ docker-compose logs <service-name>
 
 Comprehensive documentation is available in the `docs/readmes/` directory:
 
+### 🎯 Quick Start & Auto-Sync
+- **[Auto-Sync Implementation](AUTO_SYNC_IMPLEMENTATION.md)** - Complete auto-sync guide
+- **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
+- **[Quick Start Guide](docs/readmes/setup-guides/QUICKSTART.md)** - Get started in 5 minutes
+- **[Local Setup Guide](docs/readmes/setup-guides/LOCAL_SETUP_GUIDE.md)** - Detailed local development setup
+
 ### 📊 Monitoring & Observability
 - **[Monitoring Guide](docs/readmes/monitoring/MONITORING_GUIDE.md)** - Comprehensive monitoring guide (400+ lines)
 - **[Monitoring Quick Start](docs/readmes/monitoring/MONITORING_QUICKSTART.md)** - Quick reference
 - **[Monitoring Architecture](docs/readmes/monitoring/MONITORING_ARCHITECTURE.md)** - Architecture diagrams
 - **[Monitoring Implementation](docs/readmes/monitoring/MONITORING_IMPLEMENTATION_SUMMARY.md)** - Implementation details
 
-### 🚀 Quick Start Guides
-- **[Quick Start Guide](docs/readmes/setup-guides/QUICKSTART.md)** - Get started in 5 minutes
-- **[Local Setup Guide](docs/readmes/setup-guides/LOCAL_SETUP_GUIDE.md)** - Detailed local development setup
+### 🚀 Setup & Configuration Guides
 - **[Local Run Guide](docs/readmes/setup-guides/LOCAL_RUN_GUIDE.md)** - Running services locally
 - **[IntelliJ IDEA Guide](docs/readmes/setup-guides/INTELLIJ_GUIDE.md)** - IDE setup and configuration
 - **[Setup Checklist](docs/readmes/setup-guides/SETUP_CHECKLIST.md)** - Complete setup checklist
