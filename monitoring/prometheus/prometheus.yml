@@ -68,7 +68,7 @@ scrape_configs:
   - job_name: 'orchestrator-service'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['orchestrator-service:8080']
+      - targets: ['orchestrator-service:8086']
         labels:
           service: 'orchestrator-service'
           tier: 'orchestration'
