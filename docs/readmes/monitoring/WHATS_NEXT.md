@@ -60,8 +60,8 @@ Open these URLs in your browser:
 ## 📊 STEP 3: View Your Dashboards
 
 ### Access Grafana:
-1. Open http://localhost:3000 in your browser
-2. Login with:
+1. Open http://localhost:3030 in your browser
+# Edit docker-compose.yml: Already configured as "3030:3000"
    - **Username**: `admin`
    - **Password**: `admin`
 3. (First time) Change password or click "Skip"
