@@ -468,7 +468,7 @@ system_cpu_usage * 100
 
 #### Accessing Grafana
 
-1. Navigate to http://localhost:3000
+1. Navigate to http://localhost:3030
 2. Login with `admin` / `admin`
 3. Dashboard is auto-provisioned and ready to use
 
