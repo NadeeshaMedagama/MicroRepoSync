@@ -105,7 +105,7 @@ check_service "GitHub Service" 8081
 check_service "Document Processor" 8082
 check_service "Embedding Service" 8083
 check_service "Milvus Service" 8084
-check_service "Orchestrator Service" 8080
+check_service "Orchestrator Service" 8086
 check_service "Monitoring Service" 8085
 
 echo ""
@@ -118,9 +118,9 @@ echo "  docker compose logs -f orchestrator-service"
 echo ""
 echo "Manually trigger sync:"
 if command -v jq &> /dev/null; then
-    echo "  curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'"
+    echo "  curl -X POST http://localhost:8086/api/orchestrator/sync | jq '.'"
 else
-    echo "  curl -X POST http://localhost:8080/api/orchestrator/sync"
+    echo "  curl -X POST http://localhost:8086/api/orchestrator/sync"
 fi
 echo ""
 echo "Check all service logs:"

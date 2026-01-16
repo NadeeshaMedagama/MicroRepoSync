@@ -21,7 +21,7 @@ echo ""
 
 # Check if orchestrator is running
 echo "Checking if Orchestrator Service is available..."
-if ! curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+if ! curl -sf http://localhost:8086/actuator/health > /dev/null 2>&1; then
     echo -e "${RED}❌ Orchestrator Service is not running${NC}"
     echo ""
     echo "Please start the services first:"
@@ -56,7 +56,7 @@ echo ""
 
 # Trigger sync
 RESPONSE_FILE=$(mktemp)
-HTTP_CODE=$(curl -s -w "%{http_code}" -X POST http://localhost:8080/api/orchestrator/sync \
+HTTP_CODE=$(curl -s -w "%{http_code}" -X POST http://localhost:8086/api/orchestrator/sync \
     -H "Content-Type: application/json" \
     -o "$RESPONSE_FILE")
 
