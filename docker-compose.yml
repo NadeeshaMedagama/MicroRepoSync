@@ -80,7 +80,7 @@ services:
       dockerfile: orchestrator-service/Dockerfile
     container_name: orchestrator-service
     ports:
-      - "8080:8080"
+      - "8086:8086"
     environment:
       - REPOSYNC_ORGANIZATION=${REPOSYNC_ORGANIZATION}
       - REPOSYNC_FILTER_KEYWORD=${REPOSYNC_FILTER_KEYWORD}
@@ -101,7 +101,7 @@ services:
       milvus-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3
