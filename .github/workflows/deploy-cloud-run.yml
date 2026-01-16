@@ -26,7 +26,7 @@ jobs:
           - name: milvus-service
             port: 8084
           - name: orchestrator-service
-            port: 8080
+            port: 8086
 
     steps:
       - name: Checkout code
