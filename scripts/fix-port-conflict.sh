@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================
-# Quick Fix for Port 8080 Already Allocated
+# Quick Fix for Port 8086 Already Allocated
 # ============================================
 
 set -e
@@ -22,19 +22,19 @@ echo "1️⃣ Stopping all containers..."
 docker compose down 2>/dev/null || true
 
 echo ""
-echo "2️⃣ Checking if port 8080 is still in use..."
-if lsof -i :8080 > /dev/null 2>&1; then
-    echo -e "${YELLOW}⚠️  Port 8080 is still in use${NC}"
+echo "2️⃣ Checking if port 8086 is still in use..."
+if lsof -i :8086 > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Port 8086 is still in use${NC}"
     echo "Finding process..."
-    PID=$(lsof -ti:8080 || true)
+    PID=$(lsof -ti:8086 || true)
     if [ -n "$PID" ]; then
-        echo "Process using port 8080: PID $PID"
+        echo "Process using port 8086: PID $PID"
         echo "Attempting to kill process..."
         kill -9 $PID 2>/dev/null || sudo kill -9 $PID 2>/dev/null || true
         sleep 2
     fi
 else
-    echo -e "${GREEN}✅ Port 8080 is free${NC}"
+    echo -e "${GREEN}✅ Port 8086 is free${NC}"
 fi
 
 echo ""
@@ -50,7 +50,7 @@ echo "5️⃣ Waiting for services to be healthy..."
 sleep 10
 
 # Check service status
-if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+if curl -sf http://localhost:8086/actuator/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Orchestrator is healthy!${NC}"
     echo ""
     echo "🎉 All fixed! Services are running."
