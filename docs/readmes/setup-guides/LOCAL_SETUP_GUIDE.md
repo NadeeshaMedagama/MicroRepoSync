@@ -1,424 +1,447 @@
-# 🚀 Local Setup and Run Guide - RepoSync Microservices
+# 🚀 Local Development Setup Guide
 
-This guide will help you run the RepoSync Microservices project on your local machine.
+This guide explains how to run the RepoSync application locally and manually update the Milvus collection.
 
-## 📋 Prerequisites Checklist
+## 📋 Prerequisites
 
-Before starting, ensure you have:
+- **Java 21** (OpenJDK or Oracle)
+- **Maven 3.8+**
+- **Docker & Docker Compose**
+- **Git**
+- **curl** (for testing endpoints)
 
-- ✅ **Java 21** (OpenJDK 21 or higher) - Already installed ✓
-- ✅ **Maven 3.6+** 
-- ✅ **Docker & Docker Compose** (for running Milvus and containerized services)
-- ✅ **GitHub Personal Access Token** with repo access
-- ✅ **Azure OpenAI API Key** and endpoint
-- ✅ **Milvus instance** (can run locally via Docker)
-
-## 🔧 Step 1: Verify Your Environment
-
+Verify prerequisites:
 ```bash
-# Check Java version (should be 21)
-java --version
-
-# Check Maven
-mvn --version
-
-# Check Docker
+java -version   # Should show Java 21
+mvn -version    # Should show Maven 3.8+
 docker --version
-docker-compose --version
+docker compose version
 ```
 
-## 📝 Step 2: Configure Environment Variables
+---
+
+## 🔧 Step 1: Configure Environment Variables
+
+### Option A: Using Docker Compose (Recommended)
 
 1. **Copy the example environment file:**
    ```bash
    cp .env.example .env
    ```
 
-2. **Edit `.env` file with your credentials:**
+2. **Edit `.env` with your actual credentials:**
    ```bash
-   nano .env  # or use your preferred editor
+   nano .env   # or use your preferred editor
    ```
 
-3. **Fill in the following values:**
+3. **Fill in the required values:**
+   ```dotenv
+   # GitHub - Get token from: https://github.com/settings/tokens
+   REPOSYNC_GITHUB_TOKEN=ghp_your_actual_token_here
+   REPOSYNC_ORGANIZATION=your-org-name
+   REPOSYNC_FILTER_KEYWORD=          # Optional: filter repos by keyword
 
-   ```env
-   # GitHub Configuration
-   REPOSYNC_GITHUB_TOKEN=ghp_YOUR_ACTUAL_TOKEN_HERE
-   REPOSYNC_ORGANIZATION=your-github-org-name
-   REPOSYNC_FILTER_KEYWORD=microservices  # or any keyword to filter repos
-   
-   # Azure OpenAI Configuration
-   AZURE_OPENAI_API_KEY=your-actual-azure-openai-key
+   # Azure OpenAI - Get from Azure Portal
+   AZURE_OPENAI_API_KEY=your-azure-key
    AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
    AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=text-embedding-ada-002
-   
-   # Milvus Configuration
-   MILVUS_URI=localhost:19530
-   MILVUS_TOKEN=  # Leave empty for local Milvus
+
+   # Milvus - Use internal Docker network (already configured)
+   MILVUS_URI=http://milvus-standalone:19530
+   MILVUS_TOKEN=root:Milvus
    MILVUS_COLLECTION_NAME=reposync_collection
-   
-   # Service URLs (for local development)
-   GITHUB_SERVICE_URL=http://localhost:8081
-   PROCESSOR_SERVICE_URL=http://localhost:8082
-   EMBEDDING_SERVICE_URL=http://localhost:8083
-   MILVUS_SERVICE_URL=http://localhost:8084
    ```
 
-**How to get credentials:**
-- **GitHub Token**: Go to GitHub → Settings → Developer settings → Personal access tokens → Generate new token (classic) → Select "repo" scope
-- **Azure OpenAI**: Get from Azure Portal → Your OpenAI resource → Keys and Endpoint
-
-## 🏗️ Step 3: Build the Project
-
-```bash
-# Navigate to project root
-cd /home/nadeeshame/IdeaProjects/Microservices_with_RepoSync
-
-# Clean and build all services
-mvn clean install
-
-# This will:
-# - Compile all Java code
-# - Run tests
-# - Package JAR files for each service
-# - Takes about 2-5 minutes on first run
-```
-
-If build fails, check:
-- Java version is 21
-- All dependencies can be downloaded
-- No compilation errors in the code
-
-## 🐳 Step 4: Choose Your Running Method
-
-You have **3 options** to run the project locally:
-
----
-
-### **Option A: Docker Compose (Easiest - Recommended)**
-
-This runs everything in containers including Milvus.
-
-```bash
-# Start all services
-docker-compose up -d
-
-# Check if all containers are running
-docker-compose ps
-
-# View logs of all services
-docker-compose logs -f
-
-# View logs of specific service
-docker-compose logs -f orchestrator-service
-
-# Stop all services
-docker-compose down
-```
-
-**Services will be available at:**
-- Orchestrator: http://localhost:8080
-- GitHub Service: http://localhost:8081
-- Document Processor: http://localhost:8082
-- Embedding Service: http://localhost:8083
-- Milvus Service: http://localhost:8084
-
----
-
-### **Option B: Run Services Individually (For Development)**
-
-This gives you more control and is better for debugging.
-
-#### 4.1: Start Milvus Database First
-
-```bash
-# Start Milvus standalone
-docker run -d \
-  --name milvus-standalone \
-  -p 19530:19530 \
-  -p 9091:9091 \
-  -v milvus-data:/var/lib/milvus \
-  milvusdb/milvus:latest \
-  milvus run standalone
-```
-
-#### 4.2: Start Each Microservice
-
-Open **5 separate terminal windows** and run each service:
-
-**Terminal 1 - GitHub Service:**
-```bash
-cd /home/nadeeshame/IdeaProjects/Microservices_with_RepoSync/github-service
-export REPOSYNC_GITHUB_TOKEN=your_token_here
-mvn spring-boot:run
-```
-
-**Terminal 2 - Document Processor Service:**
-```bash
-cd /home/nadeeshame/IdeaProjects/Microservices_with_RepoSync/document-processor-service
-mvn spring-boot:run
-```
-
-**Terminal 3 - Embedding Service:**
-```bash
-cd /home/nadeeshame/IdeaProjects/Microservices_with_RepoSync/embedding-service
-export AZURE_OPENAI_API_KEY=your_key_here
-export AZURE_OPENAI_ENDPOINT=your_endpoint_here
-export AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=text-embedding-ada-002
-mvn spring-boot:run
-```
-
-**Terminal 4 - Milvus Service:**
-```bash
-cd /home/nadeeshame/IdeaProjects/Microservices_with_RepoSync/milvus-service
-export MILVUS_URI=localhost:19530
-export MILVUS_COLLECTION_NAME=reposync_collection
-mvn spring-boot:run
-```
-
-**Terminal 5 - Orchestrator Service:**
-```bash
-cd /home/nadeeshame/IdeaProjects/Microservices_with_RepoSync/orchestrator-service
-export REPOSYNC_ORGANIZATION=your_org_here
-export REPOSYNC_FILTER_KEYWORD=your_keyword_here
-export MILVUS_COLLECTION_NAME=reposync_collection
-export GITHUB_SERVICE_URL=http://localhost:8081
-export PROCESSOR_SERVICE_URL=http://localhost:8082
-export EMBEDDING_SERVICE_URL=http://localhost:8083
-export MILVUS_SERVICE_URL=http://localhost:8084
-mvn spring-boot:run
-```
-
-**Note:** Easier way is to set all variables in your shell's RC file (~/.bashrc or ~/.zshrc) or use the .env file with `export $(cat .env | xargs)` before running.
-
----
-
-### **Option C: Using IntelliJ IDEA (Best for Development)**
-
-1. **Open the project in IntelliJ IDEA**
-   - File → Open → Select the project root directory
-
-2. **Configure Java 21**
-   - File → Project Structure → Project → SDK → Select Java 21
-   - File → Project Structure → Project → Language Level → 21
-
-3. **Import Maven Projects**
-   - IntelliJ should auto-detect and import all Maven modules
-   - Wait for dependencies to download
-
-4. **Configure Environment Variables**
-   - Run → Edit Configurations → Add New Configuration → Spring Boot
-   - For each service (github-service, document-processor-service, etc.):
-     - Main class: `com.reposync.xxx.XxxApplication`
-     - Environment variables: Copy from .env file
-     - Working directory: Service directory
-
-5. **Start Milvus in Docker**
+4. **Important:** Never commit `.env` to version control!
    ```bash
-   docker run -d --name milvus-standalone -p 19530:19530 milvusdb/milvus:latest milvus run standalone
+   # Already in .gitignore, but verify:
+   grep ".env" .gitignore
    ```
-
-6. **Run Services in Order**
-   - Start github-service
-   - Start document-processor-service
-   - Start embedding-service
-   - Start milvus-service
-   - Start orchestrator-service (last)
 
 ---
 
-## ✅ Step 5: Verify Services are Running
-
-Check health endpoints:
+## 🏗️ Step 2: Build the Application
 
 ```bash
-# Check all services
-curl http://localhost:8080/actuator/health  # Orchestrator
-curl http://localhost:8081/actuator/health  # GitHub
+# Build all microservices (skip tests for faster build)
+mvn clean package -DskipTests
+
+# Or build with checkstyle disabled:
+mvn clean package -DskipTests -Dcheckstyle.skip=true
+```
+
+This creates JAR files in each service's `target/` directory.
+
+---
+
+## 🐳 Step 3: Start All Services with Docker Compose
+
+### Start All Services:
+```bash
+docker compose up -d
+```
+
+This starts:
+- ✅ Milvus infrastructure (etcd, minio, milvus-standalone)
+- ✅ All 5 microservices (github, processor, embedding, milvus, orchestrator)
+- ✅ Monitoring stack (prometheus, grafana, monitoring-service)
+
+### View Service Status:
+```bash
+docker compose ps
+```
+
+### View Logs:
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f orchestrator-service
+docker compose logs -f milvus-service
+```
+
+### Wait for Health Checks:
+```bash
+# Check orchestrator (waits for all dependencies)
+curl http://localhost:8080/actuator/health
+
+# Check individual services
+curl http://localhost:8081/actuator/health  # GitHub Service
 curl http://localhost:8082/actuator/health  # Document Processor
-curl http://localhost:8083/actuator/health  # Embedding
-curl http://localhost:8084/actuator/health  # Milvus
+curl http://localhost:8083/actuator/health  # Embedding Service
+curl http://localhost:8084/actuator/health  # Milvus Service
 ```
 
-All should return: `{"status":"UP"}`
+---
 
-## 🎯 Step 6: Trigger Manual Sync
+## 📊 Step 4: Manually Trigger a Sync (Update Milvus Collection)
 
-Once all services are running, trigger a sync:
+### Method 1: Using curl (Command Line)
 
 ```bash
-# Trigger the sync process
+# Trigger the sync
+curl -X POST http://localhost:8080/api/orchestrator/sync \
+  -H "Content-Type: application/json" \
+  | jq '.'
+
+# Expected successful response:
+# {
+#   "status": "SUCCESS",
+#   "repositoriesProcessed": 5,
+#   "documentsProcessed": 150,
+#   "chunksCreated": 450,
+#   "vectorsStored": 450,
+#   "startTime": "2026-01-15T10:30:00Z",
+#   "endTime": "2026-01-15T10:35:00Z"
+# }
+```
+
+### Method 2: Using Postman or Insomnia
+
+- **Method:** POST
+- **URL:** `http://localhost:8080/api/orchestrator/sync`
+- **Headers:** `Content-Type: application/json`
+- **Body:** (empty or `{}`)
+
+### Method 3: Using the Monitoring Dashboard
+
+1. Open Grafana: http://localhost:3000
+2. Default credentials: `admin` / `admin`
+3. View sync metrics in real-time
+
+---
+
+## 🔍 Step 5: Verify Data in Milvus
+
+### Option A: Using the Milvus Service API
+
+```bash
+# Get collection stats
+curl http://localhost:8084/api/milvus/stats
+
+# Search for documents (example)
+curl -X POST http://localhost:8084/api/milvus/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "authentication implementation",
+    "topK": 5
+  }' | jq '.'
+```
+
+### Option B: Using Attu (Milvus Web UI)
+
+1. **Install Attu:**
+   ```bash
+   docker run -d --name attu \
+     --network microservices_with_reposync_reposync-network \
+     -p 8000:3000 \
+     -e MILVUS_URL=milvus-standalone:19530 \
+     zilliz/attu:latest
+   ```
+
+2. **Access:** http://localhost:8000
+3. **Connect:** 
+   - Host: `milvus-standalone`
+   - Port: `19530`
+   - Username: `root`
+   - Password: `Milvus`
+
+### Option C: Using Python Milvus Client
+
+```python
+from pymilvus import connections, Collection
+
+# Connect
+connections.connect(
+    alias="default",
+    host='localhost',
+    port='19530',
+    user='root',
+    password='Milvus'
+)
+
+# Get collection
+collection = Collection("reposync_collection")
+collection.load()
+
+# Get stats
+print(f"Number of entities: {collection.num_entities}")
+
+# Search example
+results = collection.search(
+    data=[[0.1, 0.2, ...]],  # Your embedding vector
+    anns_field="embedding",
+    param={"metric_type": "L2", "params": {"nprobe": 10}},
+    limit=10
+)
+```
+
+---
+
+## 🎯 Common Use Cases
+
+### 1. Sync Specific Organization
+Edit `.env`:
+```dotenv
+REPOSYNC_ORGANIZATION=microsoft
+REPOSYNC_FILTER_KEYWORD=typescript
+```
+Restart: `docker compose restart orchestrator-service`
+
+### 2. Clear and Re-sync Collection
+```bash
+# Stop services
+docker compose down
+
+# Remove Milvus data volumes
+docker volume rm microservices_with_reposync_milvus-data
+
+# Restart everything
+docker compose up -d
+
+# Wait for health, then trigger sync
 curl -X POST http://localhost:8080/api/orchestrator/sync
-
-# You should see a response like:
-# {"status":"success","message":"Sync completed successfully"}
 ```
 
-Watch the logs to see:
-1. Repositories being fetched from GitHub
-2. Documents being chunked
-3. Embeddings being generated
-4. Vectors being stored in Milvus
-
-## 📊 Step 7: Monitor the Process
-
-### View Logs
-
-**Docker Compose:**
+### 3. Debug a Failed Sync
 ```bash
-docker-compose logs -f orchestrator-service
-```
+# Check orchestrator logs
+docker compose logs --tail=200 orchestrator-service
 
-**Individual Services:**
-Check the terminal window where each service is running.
-
-**IntelliJ:**
-View logs in the Run console at the bottom.
-
-### Check Service Status
-
-```bash
-# See all running containers
-docker ps
+# Check which service failed
+docker compose ps
 
 # Check specific service logs
-docker logs orchestrator-service -f
+docker compose logs milvus-service
+docker compose logs embedding-service
 ```
 
-## 🐛 Troubleshooting
-
-### Issue: Build fails with "release version not supported"
-
-**Solution:**
+### 4. Test Individual Services
 ```bash
-# Verify Java 21 is active
-java --version
+# Test GitHub service
+curl http://localhost:8081/api/github/repos?organization=microsoft
 
-# Should show: openjdk 21.0.9
-
-# Clean and rebuild
-mvn clean install -U
-```
-
-### Issue: Port already in use
-
-**Solution:**
-```bash
-# Find what's using the port
-lsof -i :8080
-
-# Kill the process
-kill -9 <PID>
-
-# Or use different ports in application.yml
-```
-
-### Issue: Cannot connect to Milvus
-
-**Solution:**
-```bash
-# Check if Milvus is running
-docker ps | grep milvus
-
-# Restart Milvus
-docker stop milvus-standalone
-docker rm milvus-standalone
-docker run -d --name milvus-standalone -p 19530:19530 milvusdb/milvus:latest milvus run standalone
-
-# Wait 30 seconds for Milvus to start, then try again
-```
-
-### Issue: Service won't start - missing environment variables
-
-**Solution:**
-```bash
-# Load .env file
-export $(cat .env | xargs)
-
-# Or set them manually
-export REPOSYNC_GITHUB_TOKEN=your_token
-export AZURE_OPENAI_API_KEY=your_key
-# ... etc
-```
-
-### Issue: GitHub API rate limit exceeded
-
-**Solution:**
-- Use a GitHub Personal Access Token (not anonymous)
-- Wait for the rate limit to reset (1 hour)
-- Reduce the number of repositories by using a more specific filter keyword
-
-### Issue: Azure OpenAI connection errors
-
-**Solution:**
-- Verify your API key is correct
-- Check endpoint URL format: `https://your-resource.openai.azure.com/`
-- Ensure your deployment name matches: `text-embedding-ada-002`
-- Check Azure OpenAI quota and rate limits
-
-## 🧪 Testing Individual Services
-
-### Test GitHub Service
-```bash
-curl "http://localhost:8081/api/github/repositories?organization=YOUR_ORG&filterKeyword=YOUR_KEYWORD"
-```
-
-### Test Document Processor Service
-```bash
-curl -X POST http://localhost:8082/api/processor/chunk \
+# Test Document Processor
+curl -X POST http://localhost:8082/api/processor/process \
   -H "Content-Type: application/json" \
-  -d '{
-    "content": "This is a test document that will be chunked into smaller pieces.",
-    "source": "test.md",
-    "metadata": {"type": "README"}
-  }'
-```
+  -d '{"content": "# Test\nSample code", "path": "test.md"}'
 
-### Test Embedding Service
-```bash
+# Test Embedding Service
 curl -X POST http://localhost:8083/api/embedding/generate \
   -H "Content-Type: application/json" \
-  -d '{
-    "text": "This is a test chunk for embedding generation."
-  }'
+  -d '{"texts": ["hello world"]}'
 ```
-
-### Test Milvus Service
-```bash
-# Check if collection exists
-curl "http://localhost:8084/api/milvus/collection/reposync_collection/exists"
-```
-
-## 📚 Next Steps
-
-1. **Customize Configuration:**
-   - Edit `application.yml` in each service for chunking size, batch sizes, etc.
-   - Modify schedule in orchestrator-service for different sync times
-
-2. **Add More Features:**
-   - Implement search API to query the vector database
-   - Add monitoring and alerting
-   - Create a web UI for visualization
-
-3. **Deploy to Production:**
-   - Follow Kubernetes deployment guide in README.md
-   - Set up CI/CD pipeline with GitHub Actions
-
-## 🎉 Success!
-
-Your RepoSync Microservices should now be running locally. The system will:
-- Fetch repositories from your GitHub organization
-- Extract README and API definition files
-- Chunk documents intelligently
-- Generate embeddings using Azure OpenAI
-- Store vectors in Milvus for similarity search
-
-Enjoy your local vector database of GitHub repositories! 🚀
 
 ---
 
-**Need Help?**
-- Check the main [README.md](../../README.md) for architecture details
-- Review logs for specific error messages
-- Open an issue on GitHub for bugs or questions
+## 🛑 Step 6: Stop and Clean Up
+
+### Stop Services (Keep Data):
+```bash
+docker compose down
+```
+
+### Stop and Remove All Data:
+```bash
+docker compose down -v
+```
+
+### Remove Built Images:
+```bash
+docker compose down --rmi all -v
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### Issue: Services won't start
+```bash
+# Check logs
+docker compose logs
+
+# Check if ports are already in use
+lsof -i :8080  # Orchestrator
+lsof -i :19530 # Milvus
+
+# Rebuild images
+docker compose build --no-cache
+docker compose up -d
+```
+
+### Issue: Milvus connection fails
+```bash
+# Check Milvus is running
+docker compose ps milvus-standalone
+
+# Check Milvus logs
+docker compose logs milvus-standalone
+
+# Restart Milvus stack
+docker compose restart milvus-etcd milvus-minio milvus-standalone milvus-service
+```
+
+### Issue: Out of Memory
+```bash
+# Check Docker resources
+docker stats
+
+# Increase Docker memory limit in Docker Desktop settings
+# Recommended: At least 8GB RAM for all services
+```
+
+### Issue: "Cannot connect to Docker daemon"
+```bash
+# Start Docker Desktop (on Mac/Windows)
+# Or start Docker service (on Linux)
+sudo systemctl start docker
+```
+
+### Issue: Log4j2 Warning During Build
+If you see this warning during Maven build:
+```
+ERROR StatusLogger Log4j2 could not find a logging implementation...
+```
+
+**This is harmless and won't affect functionality.** To suppress it:
+```bash
+mvn clean package -DskipTests -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN
+```
+
+Or ignore it - the build will still succeed.
+
+---
+
+## 📚 Additional Resources
+
+### Service Ports
+- **8080** - Orchestrator Service (Main API)
+- **8081** - GitHub Service
+- **8082** - Document Processor Service
+- **8083** - Embedding Service
+- **8084** - Milvus Service
+- **8085** - Monitoring Service
+- **3000** - Grafana Dashboard
+- **9090** - Prometheus
+- **19530** - Milvus gRPC
+- **9091** - Milvus Metrics
+
+### API Documentation
+Access Swagger UI (if enabled):
+- http://localhost:8080/swagger-ui.html
+
+### Monitoring
+- **Grafana:** http://localhost:3000 (admin/admin)
+- **Prometheus:** http://localhost:9090
+
+### Useful Commands
+```bash
+# Rebuild single service
+docker compose build orchestrator-service
+docker compose up -d orchestrator-service
+
+# View resource usage
+docker stats
+
+# Clean up unused Docker resources
+docker system prune -a
+
+# Export logs
+docker compose logs > all-services.log
+```
+
+---
+
+## 🎓 Development Workflow
+
+1. **Make code changes** in your IDE
+2. **Rebuild affected service:**
+   ```bash
+   mvn clean package -pl orchestrator-service -am -DskipTests
+   ```
+3. **Restart the service:**
+   ```bash
+   docker compose up -d --build orchestrator-service
+   ```
+4. **Test changes:**
+   ```bash
+   curl http://localhost:8080/actuator/health
+   ```
+5. **View logs:**
+   ```bash
+   docker compose logs -f orchestrator-service
+   ```
+
+---
+
+## ✅ Quick Start (TL;DR)
+
+```bash
+# 1. Setup
+cp .env.example .env
+nano .env  # Fill in your credentials
+
+# 2. Build
+mvn clean package -DskipTests
+
+# 3. Start
+docker compose up -d
+
+# 4. Wait for health
+sleep 60
+curl http://localhost:8080/actuator/health
+
+# 5. Trigger sync
+curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'
+
+# 6. Stop
+docker compose down
+```
+
+---
+
+**Need help?** Check the logs: `docker compose logs -f`
+
+**Having issues?** See the troubleshooting section above.
 
