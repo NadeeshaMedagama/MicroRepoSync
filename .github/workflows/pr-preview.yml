@@ -95,7 +95,7 @@ jobs:
             --platform managed \
             --region $REGION \
             --allow-unauthenticated \
-            --port 8080 \
+            --port 8086 \
             --set-env-vars="REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}" \
             --set-env-vars="REPOSYNC_ORGANIZATION=${{ secrets.REPOSYNC_ORGANIZATION }}" \
             --set-env-vars="REPOSYNC_FILTER_KEYWORD=${{ secrets.REPOSYNC_FILTER_KEYWORD }}" \
