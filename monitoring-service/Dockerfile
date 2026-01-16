@@ -21,6 +21,9 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
+# Install curl for healthchecks
+RUN apk add --no-cache curl
+
 COPY --from=build /app/monitoring-service/target/monitoring-service-*.jar app.jar
 
 EXPOSE 8085
