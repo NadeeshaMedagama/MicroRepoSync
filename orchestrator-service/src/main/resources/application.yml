@@ -8,6 +8,7 @@ spring:
 reposync:
   organization: ${REPOSYNC_ORGANIZATION}
   filter-keyword: ${REPOSYNC_FILTER_KEYWORD:}
+  auto-sync-on-startup: ${REPOSYNC_AUTO_SYNC_ON_STARTUP:true}
   schedule:
     cron: "0 0 8 * * *"  # Daily at 8:00 AM
 
