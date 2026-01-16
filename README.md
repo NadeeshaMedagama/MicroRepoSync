@@ -49,7 +49,7 @@ This project follows a microservices architecture with six independent services 
    - Handles vector upserts and schema management
    - Works with cloud Milvus (Zilliz)
 
-5. **Orchestrator Service** (Port 8080)
+5. **Orchestrator Service** (Port 8086)
    - Coordinates the entire sync workflow
    - **Auto-sync on startup** (configurable, enabled by default)
    - Scheduled execution (daily at 8:00 AM)
@@ -197,7 +197,7 @@ docker compose up -d
 docker compose logs -f
 
 # (Optional) Manually trigger sync if needed
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 
 # Access monitoring interfaces
 # Grafana: http://localhost:3000 (admin/admin)
@@ -251,7 +251,7 @@ export REPOSYNC_AUTO_SYNC_ON_STARTUP=false
 docker compose restart orchestrator-service
 
 # Manually trigger sync when needed
-curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'
+curl -X POST http://localhost:8086/api/orchestrator/sync | jq '.'
 ```
 
 ## ☁️ Deploying to Kubernetes
@@ -281,7 +281,7 @@ kubectl logs -f deployment/orchestrator-service -n reposync
 kubectl get service orchestrator-service -n reposync
 
 # Trigger sync
-curl -X POST http://<EXTERNAL-IP>:8080/api/orchestrator/sync
+curl -X POST http://<EXTERNAL-IP>:8086/api/orchestrator/sync
 ```
 
 ## 🤖 GitHub Actions Setup
@@ -495,7 +495,7 @@ Each service exposes Spring Boot Actuator health endpoints:
 
 ```bash
 # Check individual services
-curl http://localhost:8080/actuator/health  # Orchestrator
+curl http://localhost:8086/actuator/health  # Orchestrator
 curl http://localhost:8081/actuator/health  # GitHub
 curl http://localhost:8082/actuator/health  # Document Processor
 curl http://localhost:8083/actuator/health  # Embedding
@@ -508,7 +508,7 @@ curl http://localhost:8085/actuator/health  # Monitoring
 Access Prometheus-formatted metrics:
 
 ```bash
-curl http://localhost:8080/actuator/prometheus
+curl http://localhost:8086/actuator/prometheus
 curl http://localhost:8081/actuator/prometheus
 # ... etc for all services
 ```
@@ -633,7 +633,7 @@ export REPOSYNC_AUTO_SYNC_ON_STARTUP=false
 docker compose restart orchestrator-service
 
 # Manually trigger sync
-curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'
+curl -X POST http://localhost:8086/api/orchestrator/sync | jq '.'
 ```
 
 ### Benefits
@@ -652,7 +652,7 @@ For detailed documentation, see [AUTO_SYNC_IMPLEMENTATION.md](AUTO_SYNC_IMPLEMEN
 
 ```bash
 # Check if port is already in use
-lsof -i :8080
+lsof -i :8086
 
 # Check logs
 docker-compose logs <service-name>
