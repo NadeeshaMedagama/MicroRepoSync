@@ -66,7 +66,7 @@ metadata:
 spec:
   type: LoadBalancer
   ports:
-    - port: 3000
+    - port: 3030
       targetPort: 3000
       name: web
   selector:
