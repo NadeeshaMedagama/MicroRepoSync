@@ -122,7 +122,7 @@ run_individual() {
 trigger_sync() {
     echo -e "\n${YELLOW}Triggering sync job...${NC}"
     sleep 30  # Wait for services to be fully ready
-    curl -X POST http://localhost:8080/api/orchestrator/sync -H "Content-Type: application/json"
+    curl -X POST http://localhost:8086/api/orchestrator/sync -H "Content-Type: application/json"
     echo -e "\n${GREEN}✓ Sync triggered${NC}"
 }
 
