@@ -35,7 +35,7 @@ monitoring:
       url: http://milvus-service:8084
       enabled: true
     - name: orchestrator-service
-      url: http://orchestrator-service:8080
+      url: http://orchestrator-service:8086
       enabled: true
 
 logging:
