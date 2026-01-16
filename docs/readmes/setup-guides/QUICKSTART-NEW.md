@@ -45,7 +45,7 @@ docker compose down -v
 
 | Service | URL | Purpose |
 |---------|-----|---------|
-| Orchestrator | http://localhost:8080 | Main API |
+| Orchestrator | http://localhost:8086 | Main API |
 | GitHub | http://localhost:8081 | Fetch repos |
 | Processor | http://localhost:8082 | Parse docs |
 | Embedding | http://localhost:8083 | Generate vectors |

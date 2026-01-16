@@ -275,7 +275,7 @@ Services are started in dependency order with appropriate sleep intervals to ens
    - Sleep: 30 seconds
    - Manages Milvus vector database operations
    
-5. **Orchestrator Service** (Port 8080)
+5. **Orchestrator Service** (Port 8086)
    - Sleep: 60 seconds
    - Coordinates the entire sync workflow
 
@@ -294,7 +294,7 @@ Services are started in dependency order with appropriate sleep intervals to ens
 
 **API Call:**
 ```bash
-curl -X POST http://localhost:8080/api/orchestrator/sync \
+curl -X POST http://localhost:8086/api/orchestrator/sync \
   -H "Content-Type: application/json" \
   -o sync-result.json
 ```
@@ -620,7 +620,7 @@ cd orchestrator-service
 mvn spring-boot:run
 
 # Trigger sync manually
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 ```
 
 ---

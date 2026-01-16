@@ -261,7 +261,7 @@ sudo systemctl start docker
 ### Scripts hang during health check
 ```bash
 # Check if ports are blocked
-lsof -i :8080
+lsof -i :8086
 
 # Check Docker resources
 docker stats
@@ -275,7 +275,7 @@ docker compose logs
 ## 📚 Additional Documentation
 
 - **Full Setup Guide:** `../LOCAL_SETUP_GUIDE.md`
-- **API Documentation:** Check Swagger UI at http://localhost:8080/swagger-ui.html
+- **API Documentation:** Check Swagger UI at http://localhost:8086/swagger-ui.html
 - **Monitoring Guide:** `../docs/readmes/monitoring/`
 - **Deployment Guide:** `../docs/readmes/build-deployment/`
 

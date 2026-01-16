@@ -32,7 +32,7 @@ All microservices expose Prometheus metrics at `/actuator/prometheus`:
 - **Document Processor** - Port 8082
 - **Embedding Service** - Port 8083
 - **Milvus Service** - Port 8084
-- **Orchestrator** - Port 8080
+- **Orchestrator** - Port 8086
 - **Monitoring Service** - Port 8085
 
 ## 🔍 Key API Endpoints
