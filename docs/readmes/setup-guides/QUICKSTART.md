@@ -24,34 +24,35 @@ nano .env  # or use any text editor
 - `AZURE_OPENAI_ENDPOINT` - From Azure Portal (e.g., https://your-resource.openai.azure.com/)
 - `AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT` - Your deployment name (e.g., text-embedding-ada-002)
 
-### Step 2: Run Quick Start Script (3-5 min)
+### Step 2: Run Start Script (3-5 min)
 
 ```bash
-./quick-start.sh
+./scripts/start-local.sh
 ```
 
 The script will automatically:
 1. Check prerequisites (Java 21, Maven, Docker)
 2. Verify .env configuration
 3. Build the project
-4. Give you options to run services
+4. Start all services with Docker Compose
+5. Wait for services to become healthy
 
-**Choose Option 1** (Docker Compose) when prompted.
+**Auto-sync will trigger automatically 5 seconds after startup!**
 
 ### Step 3: Verify Everything Works (1 min)
 
 ```bash
 # Check all services are up
-docker-compose ps
+docker compose ps
 
-# Test the orchestrator
-curl -X POST http://localhost:8080/api/orchestrator/sync
+# Verify auto-sync was triggered
+./scripts/verify-auto-sync.sh
 
-# Watch logs
-docker-compose logs -f
+# Watch live sync progress
+docker compose logs -f orchestrator-service
 ```
 
-**Success!** Your microservices are now running! 🎉
+**Success!** Your microservices are running and automatically syncing repositories! 🎉
 
 ---
 
@@ -61,19 +62,31 @@ If you prefer to run commands manually:
 
 ```bash
 # 1. Build project
-mvn clean install
+mvn clean package -DskipTests -Dcheckstyle.skip=true
 
 # 2. Load environment variables
-export $(cat .env | grep -v '^#' | xargs)
+source .env
 
 # 3. Start all services with Docker Compose
-docker-compose up -d
+docker compose up -d
 
-# 4. Check status
-docker-compose ps
+# 4. Wait for services to be ready (30-60 seconds)
+sleep 60
 
-# 5. Trigger sync
-curl -X POST http://localhost:8080/api/orchestrator/sync
+# 5. Check status
+docker compose ps
+
+# 6. Verify auto-sync (it runs automatically on startup)
+./scripts/verify-auto-sync.sh
+
+# (Optional) Manually trigger sync if needed
+curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'
+```
+
+**Note:** Auto-sync is enabled by default. To disable:
+```bash
+export REPOSYNC_AUTO_SYNC_ON_STARTUP=false
+docker compose restart orchestrator-service
 ```
 
 ---
