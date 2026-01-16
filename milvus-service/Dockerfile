@@ -21,6 +21,9 @@ RUN mvn clean package -pl milvus-service -am -DskipTests -Dcheckstyle.skip=true
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+# Install curl for healthchecks
+RUN apk add --no-cache curl
+
 # Copy the built jar
 COPY --from=build /app/milvus-service/target/*.jar app.jar
 
