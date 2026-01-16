@@ -51,7 +51,7 @@ echo "⏳ Waiting for service to become healthy..."
 sleep 10
 
 # Check health
-if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+if curl -sf http://localhost:8086/actuator/health > /dev/null 2>&1; then
     echo "✅ Orchestrator is healthy!"
     echo ""
     echo "📋 Monitoring auto-sync..."
