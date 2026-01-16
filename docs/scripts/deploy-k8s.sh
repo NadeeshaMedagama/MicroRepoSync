@@ -78,7 +78,7 @@ echo -e "\n${YELLOW}To check logs:${NC}"
 echo "kubectl logs -f deployment/orchestrator-service -n reposync"
 
 echo -e "\n${YELLOW}To trigger sync:${NC}"
-echo "kubectl exec -it deployment/orchestrator-service -n reposync -- curl -X POST http://localhost:8080/api/orchestrator/sync"
+echo "kubectl exec -it deployment/orchestrator-service -n reposync -- curl -X POST http://localhost:8086/api/orchestrator/sync"
 
 echo -e "\n${GREEN}Deployment complete!${NC}"
 
