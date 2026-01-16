@@ -152,7 +152,7 @@ jobs:
         run: |
           echo "🚀 Triggering repository sync job..."
           
-          HTTP_CODE=$(curl -s -w "%{http_code}" -X POST http://localhost:8080/api/orchestrator/sync \
+          HTTP_CODE=$(curl -s -w "%{http_code}" -X POST http://localhost:8086/api/orchestrator/sync \
             -H "Content-Type: application/json" \
             -o sync-result.json)
           
