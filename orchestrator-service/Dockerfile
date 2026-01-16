@@ -28,7 +28,7 @@ RUN apk add --no-cache curl
 COPY --from=build /app/orchestrator-service/target/*.jar app.jar
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8086
 
 # Run the application
 ENTRYPOINT ["java", "-jar", "app.jar"]
