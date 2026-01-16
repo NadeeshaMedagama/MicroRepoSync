@@ -21,6 +21,9 @@ RUN mvn clean package -pl document-processor-service -am -DskipTests -Dcheckstyl
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+# Install curl for healthchecks
+RUN apk add --no-cache curl
+
 # Copy the built jar
 COPY --from=build /app/document-processor-service/target/*.jar app.jar
 
