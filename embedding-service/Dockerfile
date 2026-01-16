@@ -21,6 +21,9 @@ RUN mvn clean package -pl embedding-service -am -DskipTests -Dcheckstyle.skip=tr
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+# Install curl for healthchecks
+RUN apk add --no-cache curl
+
 # Copy the built jar
 COPY --from=build /app/embedding-service/target/*.jar app.jar
 
