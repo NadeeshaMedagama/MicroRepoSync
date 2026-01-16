@@ -61,7 +61,7 @@ RepoSync Application
 ├── document-processor      (Port 8082)
 ├── embedding-service       (Port 8083)
 ├── milvus-service         (Port 8084)
-├── orchestrator-service   (Port 8080)
+├── orchestrator-service   (Port 8086)
 └── monitoring-service     (Port 8085)
 ```
 

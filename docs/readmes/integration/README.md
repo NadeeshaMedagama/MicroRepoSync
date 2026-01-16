@@ -381,7 +381,7 @@ public void testCompleteWorkflow() {
 docker-compose ps
 
 # Check service health
-for port in 8080 8081 8082 8083 8084 8085; do
+for port in 8086 8081 8082 8083 8084 8085; do
   curl -s http://localhost:$port/actuator/health | jq .
 done
 

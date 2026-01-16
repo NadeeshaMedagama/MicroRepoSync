@@ -128,7 +128,7 @@ docker-compose up -d
 docker-compose ps
 
 # 5. Access the application
-# Orchestrator: http://localhost:8080
+# Orchestrator: http://localhost:8086
 # Grafana: http://localhost:3000
 ```
 
