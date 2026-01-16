@@ -59,13 +59,12 @@ echo "$HEALTH_RESPONSE" | jq '.' 2>/dev/null || echo "$HEALTH_RESPONSE"
 
 echo ""
 echo "📋 Milvus Container Status:"
-docker compose ps milvus-standalone milvus-service
+docker compose ps milvus-service
 
 echo ""
 echo "🛠️  Available Actions:"
 echo "  • Trigger new sync:     ./scripts/trigger-sync.sh"
 echo "  • View Milvus logs:     docker compose logs milvus-service"
-echo "  • View standalone logs: docker compose logs milvus-standalone"
-echo "  • Clear collection:     docker compose down -v (WARNING: Deletes all data!)"
+echo "  • Restart service:      docker compose restart milvus-service"
 echo ""
 
