@@ -78,7 +78,7 @@ docker-compose up -d
 
 2. **Access the monitoring interfaces:**
    - Prometheus: http://localhost:9090
-   - Grafana: http://localhost:3000
+   - Grafana: http://localhost:3030
    - Monitoring Service API: http://localhost:8085/api/monitoring
 
 3. **View metrics in Prometheus:**
