@@ -197,5 +197,5 @@ Your monitoring system is now ready with:
 ./docs/scripts/start-monitoring.sh
 ```
 
-Then access Grafana at http://localhost:3000 (admin/admin)
+Then access Grafana at http://localhost:3030 (admin/admin)
 
