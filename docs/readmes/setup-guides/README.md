@@ -129,7 +129,7 @@ docker-compose ps
 
 # 5. Access the application
 # Orchestrator: http://localhost:8086
-# Grafana: http://localhost:3000
+# Grafana: http://localhost:3030
 ```
 
 For detailed instructions, see [QUICKSTART.md](QUICKSTART.md)
