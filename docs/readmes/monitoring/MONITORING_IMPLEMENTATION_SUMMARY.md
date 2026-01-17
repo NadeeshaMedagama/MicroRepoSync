@@ -545,7 +545,7 @@ The implementation demonstrates:
    ./docs/scripts/start-monitoring.sh
    ```
 
-2. **Access Grafana**: http://localhost:3000 (admin/admin)
+2. **Access Grafana**: http://localhost:3030 (admin/admin)
 
 3. **Import dashboards**: Already provisioned automatically
 
