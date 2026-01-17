@@ -69,7 +69,7 @@ RepoSync Application
 ```
 Infrastructure
 ├── Prometheus             (Port 9090)
-├── Grafana               (Port 3000)
+├── Grafana               (Port 3030)
 ├── Milvus Standalone     (Port 19530)
 │   ├── etcd
 │   └── MinIO
