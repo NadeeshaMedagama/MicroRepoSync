@@ -262,7 +262,7 @@
 │  Services:                               │
 │  ├─ monitoring-service:8085 (ClusterIP)  │
 │  ├─ prometheus:9090 (ClusterIP)          │
-│  └─ grafana:3000 (LoadBalancer)          │
+│  └─ grafana:3030 (LoadBalancer)          │
 │                                          │
 │  ConfigMaps:                             │
 │  ├─ prometheus-config                    │
