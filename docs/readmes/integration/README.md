@@ -392,7 +392,7 @@ done
 curl http://localhost:9090/api/v1/targets | jq .
 
 # Verify Grafana dashboards
-curl http://localhost:3000/api/health
+curl http://localhost:3030/api/health
 ```
 
 ---
