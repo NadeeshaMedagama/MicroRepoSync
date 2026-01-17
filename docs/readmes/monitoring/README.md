@@ -68,7 +68,7 @@ mvn clean package -pl monitoring-service -am -DskipTests
 ./docs/scripts/start-monitoring.sh
 
 # 3. Access the interfaces
-# Grafana: http://localhost:3000 (admin/admin)
+# Grafana: http://localhost:3030 (admin/admin)
 # Prometheus: http://localhost:9090
 # Monitoring API: http://localhost:8085/api/monitoring
 ```
