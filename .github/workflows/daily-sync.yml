@@ -69,22 +69,24 @@ jobs:
           echo "ℹ️  Note: Using internal Docker Milvus (milvus-standalone) for CI runs"
 
       - name: Start Services with Docker Compose
-        env:
-          # Pass all secrets as environment variables for Docker Compose
-          REPOSYNC_GITHUB_TOKEN: ${{ secrets.REPOSYNC_GITHUB_TOKEN }}
-          REPOSYNC_ORGANIZATION: ${{ secrets.REPOSYNC_ORGANIZATION }}
-          REPOSYNC_FILTER_KEYWORD: ${{ secrets.REPOSYNC_FILTER_KEYWORD }}
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
-
-          # Use Zilliz Cloud (cloud Milvus) from secrets
-          MILVUS_URI: ${{ secrets.MILVUS_URI }}
-          MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
-          MILVUS_COLLECTION_NAME: ${{ secrets.MILVUS_COLLECTION_NAME }}
         run: |
           echo "🐳 Starting all services with Docker Compose..."
           echo "This will build images and start services with proper health checks"
+          
+          # Create .env file with all necessary environment variables
+          cat > .env << EOF
+          REPOSYNC_GITHUB_TOKEN=${{ secrets.REPOSYNC_GITHUB_TOKEN }}
+          REPOSYNC_ORGANIZATION=${{ secrets.REPOSYNC_ORGANIZATION }}
+          REPOSYNC_FILTER_KEYWORD=${{ secrets.REPOSYNC_FILTER_KEYWORD }}
+          AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}
+          MILVUS_URI=${{ secrets.MILVUS_URI }}
+          MILVUS_TOKEN=${{ secrets.MILVUS_TOKEN }}
+          MILVUS_COLLECTION_NAME=${{ secrets.MILVUS_COLLECTION_NAME }}
+          EOF
+          
+          echo "✅ .env file created with secrets"
           
           # Start only application services (using Zilliz Cloud for Milvus, not local containers)
           docker compose up -d \
@@ -106,7 +108,7 @@ jobs:
           ELAPSED=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
-            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+            if curl -sf http://localhost:8086/actuator/health > /dev/null 2>&1; then
               echo "✅ Orchestrator Service is healthy!"
               echo ""
               echo "Verifying all services are responding:"
@@ -123,8 +125,8 @@ jobs:
               echo "  4. Milvus Service (8084):"
               curl -sf http://localhost:8084/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
               
-              echo "  5. Orchestrator Service (8080):"
-              curl -sf http://localhost:8080/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
+              echo "  5. Orchestrator Service (8086):"
+              curl -sf http://localhost:8086/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
               
               echo ""
               echo "✅ All services are ready!"
