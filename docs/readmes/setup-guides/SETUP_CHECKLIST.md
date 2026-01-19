@@ -127,7 +127,7 @@ Pick ONE of the following:
 
 - [ ] All services health checks pass:
   ```bash
-  curl http://localhost:8080/actuator/health  # Orchestrator
+  curl http://localhost:8086/actuator/health  # Orchestrator
   curl http://localhost:8081/actuator/health  # GitHub
   curl http://localhost:8082/actuator/health  # Document Processor
   curl http://localhost:8083/actuator/health  # Embedding
@@ -145,7 +145,7 @@ Pick ONE of the following:
 
 - [ ] Trigger manual sync:
   ```bash
-  curl -X POST http://localhost:8080/api/orchestrator/sync
+  curl -X POST http://localhost:8086/api/orchestrator/sync
   ```
 
 - [ ] Check response is successful
