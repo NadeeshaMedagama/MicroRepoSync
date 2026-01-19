@@ -200,7 +200,7 @@ docker compose logs -f
 curl -X POST http://localhost:8086/api/orchestrator/sync
 
 # Access monitoring interfaces
-# Grafana: http://localhost:3000 (admin/admin)
+# Grafana: http://localhost:3030 (admin/admin)
 # Prometheus: http://localhost:9090
 # Monitoring API: http://localhost:8085/api/monitoring
 
@@ -326,14 +326,14 @@ Two workflows are configured:
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Orchestrator | 8080 | Main workflow coordinator |
+| Orchestrator | 8086 | Main workflow coordinator |
 | GitHub | 8081 | GitHub API integration |
 | Document Processor | 8082 | Document chunking |
 | Embedding | 8083 | Azure OpenAI embeddings |
 | Milvus | 8084 | Vector database service |
 | Monitoring | 8085 | Health & metrics aggregation |
 | Prometheus | 9090 | Metrics collection |
-| Grafana | 3000 | Monitoring dashboards |
+| Grafana | 3030 | Monitoring dashboards |
 
 ### Chunking Configuration
 
@@ -380,7 +380,7 @@ docker-compose up -d monitoring-service prometheus grafana
 
 | Interface | URL | Credentials | Description |
 |-----------|-----|-------------|-------------|
-| **Grafana** | http://localhost:3000 | admin/admin | Visual dashboards |
+| **Grafana** | http://localhost:3030 | admin/admin | Visual dashboards |
 | **Prometheus** | http://localhost:9090 | - | Metrics & queries |
 | **Monitoring API** | http://localhost:8085/api/monitoring | - | Health status API |
 
