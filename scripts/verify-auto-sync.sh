@@ -28,12 +28,12 @@ echo ""
 
 # Check orchestrator health
 echo "2️⃣ Checking orchestrator service health..."
-if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+if curl -sf http://localhost:8086/actuator/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Orchestrator is healthy${NC}"
     if command -v jq &> /dev/null; then
-        curl -s http://localhost:8080/actuator/health | jq '.'
+        curl -s http://localhost:8086/actuator/health | jq '.'
     else
-        curl -s http://localhost:8080/actuator/health
+        curl -s http://localhost:8086/actuator/health
     fi
 else
     echo -e "${RED}❌ Orchestrator is not responding${NC}"
