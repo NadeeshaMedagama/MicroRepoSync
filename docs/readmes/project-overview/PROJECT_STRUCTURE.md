@@ -233,7 +233,7 @@ docker-compose up -d
 ./deploy-k8s.sh
 
 # Manual trigger
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 ```
 
 ## Testing
@@ -246,7 +246,7 @@ mvn test
 cd github-service && mvn test
 
 # Integration test (requires services running)
-curl http://localhost:8080/actuator/health
+curl http://localhost:8086/actuator/health
 ```
 
 ## Monitoring
