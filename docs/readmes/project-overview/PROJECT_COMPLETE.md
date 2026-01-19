@@ -119,7 +119,7 @@ mvn clean install
 
 ```bash
 # Manual trigger
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 
 # Or use the script
 ./start-services.sh
@@ -223,7 +223,7 @@ docker-compose logs -f
 ./deploy-k8s.sh
 
 # Trigger sync
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 ```
 
 ## ✅ Quality Checklist
