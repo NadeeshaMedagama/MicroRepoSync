@@ -104,7 +104,7 @@ docker compose logs -f milvus-service
 ### Wait for Health Checks:
 ```bash
 # Check orchestrator (waits for all dependencies)
-curl http://localhost:8080/actuator/health
+curl http://localhost:8086/actuator/health
 
 # Check individual services
 curl http://localhost:8081/actuator/health  # GitHub Service
@@ -121,7 +121,7 @@ curl http://localhost:8084/actuator/health  # Milvus Service
 
 ```bash
 # Trigger the sync
-curl -X POST http://localhost:8080/api/orchestrator/sync \
+curl -X POST http://localhost:8086/api/orchestrator/sync \
   -H "Content-Type: application/json" \
   | jq '.'
 
@@ -140,13 +140,13 @@ curl -X POST http://localhost:8080/api/orchestrator/sync \
 ### Method 2: Using Postman or Insomnia
 
 - **Method:** POST
-- **URL:** `http://localhost:8080/api/orchestrator/sync`
+- **URL:** `http://localhost:8086/api/orchestrator/sync`
 - **Headers:** `Content-Type: application/json`
 - **Body:** (empty or `{}`)
 
 ### Method 3: Using the Monitoring Dashboard
 
-1. Open Grafana: http://localhost:3000
+1. Open Grafana: http://localhost:3030
 2. Default credentials: `admin` / `admin`
 3. View sync metrics in real-time
 
@@ -241,7 +241,7 @@ docker volume rm microservices_with_reposync_milvus-data
 docker compose up -d
 
 # Wait for health, then trigger sync
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 ```
 
 ### 3. Debug a Failed Sync
@@ -369,10 +369,10 @@ Or ignore it - the build will still succeed.
 
 ### API Documentation
 Access Swagger UI (if enabled):
-- http://localhost:8080/swagger-ui.html
+- http://localhost:8086/swagger-ui.html
 
 ### Monitoring
-- **Grafana:** http://localhost:3000 (admin/admin)
+- **Grafana:** http://localhost:3030 (admin/admin)
 - **Prometheus:** http://localhost:9090
 
 ### Useful Commands
@@ -406,7 +406,7 @@ docker compose logs > all-services.log
    ```
 4. **Test changes:**
    ```bash
-   curl http://localhost:8080/actuator/health
+   curl http://localhost:8086/actuator/health
    ```
 5. **View logs:**
    ```bash
@@ -430,10 +430,10 @@ docker compose up -d
 
 # 4. Wait for health
 sleep 60
-curl http://localhost:8080/actuator/health
+curl http://localhost:8086/actuator/health
 
 # 5. Trigger sync
-curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'
+curl -X POST http://localhost:8086/api/orchestrator/sync | jq '.'
 
 # 6. Stop
 docker compose down
