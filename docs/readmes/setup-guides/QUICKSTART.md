@@ -80,7 +80,7 @@ docker compose ps
 ./scripts/verify-auto-sync.sh
 
 # (Optional) Manually trigger sync if needed
-curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'
+curl -X POST http://localhost:8086/api/orchestrator/sync | jq '.'
 ```
 
 **Note:** Auto-sync is enabled by default. To disable:
@@ -95,7 +95,7 @@ docker compose restart orchestrator-service
 
 | Service | URL |
 |---------|-----|
-| Orchestrator | http://localhost:8080 |
+| Orchestrator | http://localhost:8086 |
 | GitHub Service | http://localhost:8081 |
 | Document Processor | http://localhost:8082 |
 | Embedding Service | http://localhost:8083 |
@@ -103,7 +103,7 @@ docker compose restart orchestrator-service
 
 **Health Checks:**
 ```bash
-curl http://localhost:8080/actuator/health
+curl http://localhost:8086/actuator/health
 ```
 
 ---
