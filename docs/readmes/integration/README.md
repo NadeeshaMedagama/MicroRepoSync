@@ -239,7 +239,7 @@ mvn verify -Pintegration-tests -Djacoco.enabled=true
 ### Load Testing
 ```bash
 # Using Apache Bench
-ab -n 1000 -c 10 http://localhost:8080/api/sync
+ab -n 1000 -c 10 http://localhost:8086/api/sync
 
 # Using k6
 k6 run load-test.js
