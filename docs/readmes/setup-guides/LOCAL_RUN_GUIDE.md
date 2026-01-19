@@ -158,7 +158,7 @@ curl http://localhost:8084/actuator/health
 # Expected: {"status":"UP"}
 
 # Orchestrator Service
-curl http://localhost:8080/actuator/health
+curl http://localhost:8086/actuator/health
 # Expected: {"status":"UP"}
 ```
 
@@ -167,7 +167,7 @@ curl http://localhost:8080/actuator/health
 Once all services are running, trigger a sync job:
 
 ```bash
-curl -X POST http://localhost:8080/api/sync/trigger \
+curl -X POST http://localhost:8086/api/sync/trigger \
   -H "Content-Type: application/json" \
   -v
 ```
@@ -201,7 +201,7 @@ INFO  c.r.o.service.SyncOrchestrator - Sync completed successfully
 Check the last sync job result:
 
 ```bash
-curl http://localhost:8080/api/sync/status
+curl http://localhost:8086/api/sync/status
 ```
 
 ## Alternative: Using IntelliJ IDEA
