@@ -21,7 +21,7 @@ cp .env.example .env && nano .env && ./scripts/start-local.sh && ./scripts/trigg
 ```
 Or via curl:
 ```bash
-curl -X POST http://localhost:8080/api/orchestrator/sync | jq '.'
+curl -X POST http://localhost:8086/api/orchestrator/sync | jq '.'
 ```
 
 ### 📊 Check Milvus Status
@@ -50,7 +50,7 @@ docker compose down -v
 | Processor | http://localhost:8082 | Parse docs |
 | Embedding | http://localhost:8083 | Generate vectors |
 | Milvus | http://localhost:8084 | Store vectors |
-| Grafana | http://localhost:3000 | Monitoring (admin/admin) |
+| Grafana | http://localhost:3030 | Monitoring (admin/admin) |
 | Prometheus | http://localhost:9090 | Metrics |
 
 ---
@@ -58,7 +58,7 @@ docker compose down -v
 ## Quick Health Check
 
 ```bash
-curl http://localhost:8080/actuator/health
+curl http://localhost:8086/actuator/health
 curl http://localhost:8081/actuator/health
 curl http://localhost:8082/actuator/health
 curl http://localhost:8083/actuator/health
