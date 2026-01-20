@@ -143,7 +143,7 @@ curl http://localhost:8085/actuator/prometheus
 
 1. ✅ Build completes successfully
 2. Start the monitoring stack: `./docs/scripts/start-monitoring.sh`
-3. Access Grafana: http://localhost:3000 (admin/admin)
+3. Access Grafana: http://localhost:3030 (admin/admin)
 4. Access Prometheus: http://localhost:9090
 5. Access Monitoring API: http://localhost:8085/api/monitoring
 
