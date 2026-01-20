@@ -104,8 +104,8 @@ jobs:
           echo "⏳ Waiting for all services to become healthy..."
           echo "Note: This may take a few minutes in GitHub Actions environment"
           
-          # Wait up to 8 minutes for all services to be healthy
-          TIMEOUT=480
+          # Wait up to 10 minutes for all services to be healthy
+          TIMEOUT=600
           ELAPSED=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
