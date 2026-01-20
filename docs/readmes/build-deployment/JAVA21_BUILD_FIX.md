@@ -87,7 +87,7 @@ docker-compose up -d
 
 3. Trigger sync:
 ```bash
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 ```
 
 ## Your Java is Perfect!
