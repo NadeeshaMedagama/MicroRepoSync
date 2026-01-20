@@ -32,13 +32,31 @@ public class MilvusService {
 
     public void createCollection(String collectionName, int dimension) {
         try {
+            log.info("=== Starting collection creation: {} with dimension {} ===", collectionName, dimension);
+
+            // First, test the connection by listing collections
+            try {
+                R<io.milvus.grpc.ShowCollectionsResponse> listResponse = milvusClient.showCollections(
+                        ShowCollectionsParam.newBuilder().build());
+                log.info("Milvus connection test - Status: {}, Collections count: {}",
+                        listResponse.getStatus(),
+                        listResponse.getData() != null ? listResponse.getData().getCollectionNamesCount() : 0);
+                if (listResponse.getStatus() != R.Status.Success.getCode()) {
+                    log.error("Milvus connection failed: {}", listResponse.getMessage());
+                    throw new RuntimeException("Cannot connect to Milvus: " + listResponse.getMessage());
+                }
+            } catch (Exception connEx) {
+                log.error("Milvus connection test failed: {}", connEx.getMessage(), connEx);
+                throw new RuntimeException("Milvus connection test failed: " + connEx.getMessage(), connEx);
+            }
+
             // Check if collection already exists
             if (hasCollection(collectionName)) {
-                log.info("Collection {} already exists", collectionName);
+                log.info("Collection {} already exists, will use existing collection", collectionName);
                 return;
             }
 
-            log.info("Creating collection {} with dimension {}", collectionName, dimension);
+            log.info("Creating new collection {} with dimension {}", collectionName, dimension);
 
             // Define collection schema
             FieldType idField = FieldType.newBuilder()
@@ -56,10 +74,11 @@ public class MilvusService {
                     .build();
 
             // Use VarChar for metadata instead of JSON for better compatibility with Zilliz Cloud
+            // Max length 32766 is a safe value for Zilliz Cloud (max is 65535 but some configs have lower limits)
             FieldType metadataField = FieldType.newBuilder()
                     .withName(METADATA_FIELD)
                     .withDataType(DataType.VarChar)
-                    .withMaxLength(65535)
+                    .withMaxLength(32766)
                     .build();
 
             CreateCollectionParam createCollectionParam = CreateCollectionParam.newBuilder()
@@ -73,13 +92,21 @@ public class MilvusService {
             log.debug("Sending createCollection request to Milvus...");
             R<RpcStatus> response = milvusClient.createCollection(createCollectionParam);
 
-            log.info("Milvus createCollection response - Status: {}, Message: {}",
-                    response.getStatus(), response.getMessage());
+            log.info("Milvus createCollection response - Status: {}, StatusCode: {}, Message: {}, Exception: {}",
+                    response.getStatus(),
+                    response.getStatus(),
+                    response.getMessage(),
+                    response.getException() != null ? response.getException().getMessage() : "none");
 
             if (response.getStatus() != R.Status.Success.getCode()) {
-                String errorMsg = String.format("Milvus createCollection failed with status %d: %s",
-                        response.getStatus(), response.getMessage());
+                String errorMsg = String.format("Milvus createCollection failed with status %d: %s (Exception: %s)",
+                        response.getStatus(),
+                        response.getMessage(),
+                        response.getException() != null ? response.getException().getMessage() : "none");
                 log.error(errorMsg);
+                if (response.getException() != null) {
+                    log.error("Milvus exception details:", response.getException());
+                }
                 throw new RuntimeException(errorMsg);
             }
 
