@@ -80,9 +80,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 5
-      start_period: 60s
+      start_period: 90s
 
   orchestrator-service:
     build:
@@ -100,6 +100,10 @@ services:
       - PROCESSOR_SERVICE_URL=http://document-processor-service:8082
       - EMBEDDING_SERVICE_URL=http://embedding-service:8083
       - MILVUS_SERVICE_URL=http://milvus-service:8084
+      # Increase Spring WebFlux timeout settings
+      - SPRING_WEBFLUX_BASEPATH=/api
+      - SERVER_NETTY_CONNECTION_TIMEOUT=60s
+      - SERVER_NETTY_IDLE_TIMEOUT=300s
       # Debug logging to capture full error details
       - LOGGING_LEVEL_ROOT=INFO
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB=DEBUG
@@ -120,9 +124,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
 
   monitoring-service:
     build:
