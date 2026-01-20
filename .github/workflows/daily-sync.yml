@@ -302,6 +302,15 @@ jobs:
             echo "Searching for specific error patterns..."
             echo ""
             
+            echo "0. Which workflow step failed:"
+            if docker compose logs orchestrator-service | grep -q "STEP.*FAILED"; then
+              echo "   Found step failure:"
+              docker compose logs orchestrator-service | grep "STEP.*FAILED" | tail -5
+            else
+              echo "   No explicit step failure marker found"
+            fi
+            echo ""
+            
             echo "1. Looking for HTTP errors (404, 500, etc.):"
             docker compose logs orchestrator-service | grep -i -E "(404|500|503|error|exception|failed)" | tail -30 || echo "   No HTTP errors found"
             echo ""
@@ -314,12 +323,17 @@ jobs:
             docker compose logs orchestrator-service | grep -i -E "(connection|refused|timeout|unreachable)" | tail -20 || echo "   No connection errors found"
             echo ""
             
-            echo "4. Checking if milvus-service received requests:"
-            if docker compose logs milvus-service | grep -q -E "(POST|GET|PUT|DELETE)"; then
-              echo "   ✅ Milvus service DID receive requests"
-              docker compose logs milvus-service | grep -E "(POST|GET|PUT|DELETE)" | tail -10
+            echo "4. Checking if milvus-service received API requests (excluding health checks):"
+            if docker compose logs milvus-service | grep -E "(POST|PUT|DELETE)" | grep -v "actuator/health" | grep -q .; then
+              echo "   ✅ Milvus service DID receive API requests"
+              docker compose logs milvus-service | grep -E "(POST|PUT|DELETE)" | grep -v "actuator/health" | tail -10
+            elif docker compose logs milvus-service | grep "GET" | grep -v "actuator/health" | grep -q "/api/milvus"; then
+              echo "   ✅ Milvus service received GET API requests"
+              docker compose logs milvus-service | grep "GET" | grep -v "actuator/health" | grep "/api/milvus" | tail -10
             else
-              echo "   ❌ Milvus service received NO requests (orchestrator never called it!)"
+              echo "   ❌ Milvus service received NO API requests (orchestrator never called it!)"
+              echo "   Only health checks were received:"
+              docker compose logs milvus-service | grep "GET.*actuator/health" | wc -l | xargs echo "   Health check count:"
             fi
             echo ""
             
