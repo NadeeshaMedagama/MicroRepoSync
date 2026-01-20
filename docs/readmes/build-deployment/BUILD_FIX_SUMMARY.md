@@ -131,11 +131,11 @@ mvn spring-boot:run
 - Document Processor: http://localhost:8082/actuator/health
 - Embedding Service: http://localhost:8083/actuator/health
 - Milvus Service: http://localhost:8084/actuator/health
-- Orchestrator: http://localhost:8080/actuator/health
+- Orchestrator: http://localhost:8086/actuator/health
 
 #### Test Sync Job:
 ```bash
-curl -X POST http://localhost:8080/api/sync/trigger \
+curl -X POST http://localhost:8086/api/sync/trigger \
   -H "Content-Type: application/json"
 ```
 
