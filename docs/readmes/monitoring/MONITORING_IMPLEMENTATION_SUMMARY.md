@@ -261,7 +261,7 @@ docker-compose up -d monitoring-service prometheus grafana
 ```
 
 3. **Access the interfaces:**
-- Grafana: http://localhost:3000 (admin/admin)
+- Grafana: http://localhost:3030 (admin/admin)
 - Prometheus: http://localhost:9090
 - Monitoring API: http://localhost:8085/api/monitoring
 
@@ -476,7 +476,7 @@ curl http://localhost:8085/api/monitoring/health
 curl http://localhost:9090/-/healthy
 
 # Test Grafana
-curl http://localhost:3000/api/health
+curl http://localhost:3030/api/health
 ```
 
 ### Verify Metrics Collection:
