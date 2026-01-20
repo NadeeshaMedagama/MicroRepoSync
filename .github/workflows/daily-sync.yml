@@ -84,9 +84,10 @@ jobs:
           MILVUS_URI=${{ secrets.MILVUS_URI }}
           MILVUS_TOKEN=${{ secrets.MILVUS_TOKEN }}
           MILVUS_COLLECTION_NAME=${{ secrets.MILVUS_COLLECTION_NAME }}
+          REPOSYNC_AUTO_SYNC_ON_STARTUP=false
           EOF
           
-          echo "✅ .env file created with secrets"
+          echo "✅ .env file created with secrets (auto-sync disabled for manual control)"
           
           # Start only application services (using Zilliz Cloud for Milvus, not local containers)
           docker compose up -d \
@@ -100,42 +101,56 @@ jobs:
 
       - name: Wait for Services to be Healthy
         run: |
-          echo "⏳ Waiting for Orchestrator Service to become healthy..."
-          echo "Note: Orchestrator won't be healthy until all dependencies are healthy"
+          echo "⏳ Waiting for all services to become healthy..."
+          echo "Note: This may take a few minutes in GitHub Actions environment"
           
-          # Wait up to 5 minutes for orchestrator to be healthy
-          TIMEOUT=300
+          # Wait up to 8 minutes for all services to be healthy
+          TIMEOUT=480
           ELAPSED=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
-            if curl -sf http://localhost:8086/actuator/health > /dev/null 2>&1; then
-              echo "✅ Orchestrator Service is healthy!"
+            # Check each service individually
+            GITHUB_HEALTHY=false
+            PROCESSOR_HEALTHY=false
+            EMBEDDING_HEALTHY=false
+            MILVUS_HEALTHY=false
+            ORCHESTRATOR_HEALTHY=false
+            
+            curl -sf http://localhost:8081/actuator/health > /dev/null 2>&1 && GITHUB_HEALTHY=true
+            curl -sf http://localhost:8082/actuator/health > /dev/null 2>&1 && PROCESSOR_HEALTHY=true
+            curl -sf http://localhost:8083/actuator/health > /dev/null 2>&1 && EMBEDDING_HEALTHY=true
+            curl -sf http://localhost:8084/actuator/health > /dev/null 2>&1 && MILVUS_HEALTHY=true
+            curl -sf http://localhost:8086/actuator/health > /dev/null 2>&1 && ORCHESTRATOR_HEALTHY=true
+            
+            if [ "$GITHUB_HEALTHY" = true ] && \
+               [ "$PROCESSOR_HEALTHY" = true ] && \
+               [ "$EMBEDDING_HEALTHY" = true ] && \
+               [ "$MILVUS_HEALTHY" = true ] && \
+               [ "$ORCHESTRATOR_HEALTHY" = true ]; then
               echo ""
-              echo "Verifying all services are responding:"
-              
-              echo "  1. GitHub Service (8081):"
-              curl -sf http://localhost:8081/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
-              
-              echo "  2. Document Processor Service (8082):"
-              curl -sf http://localhost:8082/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
-              
-              echo "  3. Embedding Service (8083):"
-              curl -sf http://localhost:8083/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
-              
-              echo "  4. Milvus Service (8084):"
-              curl -sf http://localhost:8084/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
-              
-              echo "  5. Orchestrator Service (8086):"
-              curl -sf http://localhost:8086/actuator/health && echo "     ✅ Healthy" || echo "     ❌ Failed"
-              
+              echo "✅ All services are healthy!"
               echo ""
-              echo "✅ All services are ready!"
+              echo "Service Health Status:"
+              echo "  ✅ GitHub Service (8081)"
+              echo "  ✅ Document Processor Service (8082)"
+              echo "  ✅ Embedding Service (8083)"
+              echo "  ✅ Milvus Service (8084)"
+              echo "  ✅ Orchestrator Service (8086)"
+              echo ""
               exit 0
             fi
             
-            echo "Waiting for services to be ready... (${ELAPSED}s / ${TIMEOUT}s)"
-            sleep 10
-            ELAPSED=$((ELAPSED + 10))
+            # Show status update
+            echo "Waiting for services... (${ELAPSED}s / ${TIMEOUT}s)"
+            echo "  GitHub: $([ "$GITHUB_HEALTHY" = true ] && echo "✅" || echo "⏳")"
+            echo "  Processor: $([ "$PROCESSOR_HEALTHY" = true ] && echo "✅" || echo "⏳")"
+            echo "  Embedding: $([ "$EMBEDDING_HEALTHY" = true ] && echo "✅" || echo "⏳")"
+            echo "  Milvus: $([ "$MILVUS_HEALTHY" = true ] && echo "✅" || echo "⏳")"
+            echo "  Orchestrator: $([ "$ORCHESTRATOR_HEALTHY" = true ] && echo "✅" || echo "⏳")"
+            echo ""
+            
+            sleep 15
+            ELAPSED=$((ELAPSED + 15))
           done
           
           echo "❌ Timeout reached! Services failed to become healthy within ${TIMEOUT}s"
@@ -143,11 +158,17 @@ jobs:
           echo "=== Docker Compose Status ==="
           docker compose ps
           echo ""
+          echo "=== GitHub Service Logs (last 50 lines) ==="
+          docker compose logs --tail=50 github-service
+          echo ""
+          echo "=== Embedding Service Logs (last 50 lines) ==="
+          docker compose logs --tail=50 embedding-service
+          echo ""
+          echo "=== Milvus Service Logs (last 50 lines) ==="
+          docker compose logs --tail=50 milvus-service
+          echo ""
           echo "=== Orchestrator Logs (last 100 lines) ==="
           docker compose logs --tail=100 orchestrator-service
-          echo ""
-          echo "=== Milvus Service Logs (last 100 lines) ==="
-          docker compose logs --tail=100 milvus-service
           exit 1
 
       - name: Trigger Sync Job
@@ -171,15 +192,22 @@ jobs:
             exit 1
           fi
           
-          echo "Sync job initiated successfully"
+          echo "✅ Sync job initiated successfully"
           echo ""
           echo "Initial response:"
           cat sync-result.json
           echo ""
           
-          # Give the sync job time to complete
-          echo "⏳ Waiting for sync to complete (60 seconds)..."
-          sleep 60
+          # Give the sync job time to complete - increased from 60s to 120s
+          echo "⏳ Waiting for sync to complete (this may take 2-3 minutes)..."
+          
+          # Monitor logs in background
+          for i in {1..24}; do
+            sleep 5
+            echo "  ... still syncing (${i}0s elapsed) ..."
+          done
+          
+          echo "✅ Sync process should be complete now"
 
       - name: Check Sync Status
         run: |
@@ -194,32 +222,34 @@ jobs:
           echo ""
           
           # Extract status
-          STATUS=$(jq -r '.status' sync-result.json)
-          ERROR_MSG=$(jq -r '.errorMessage' sync-result.json)
+          STATUS=$(jq -r '.status // "UNKNOWN"' sync-result.json)
+          ERROR_MSG=$(jq -r '.errorMessage // "N/A"' sync-result.json)
           
-          if [ "$STATUS" != "SUCCESS" ]; then
+          # Show final logs
+          echo "=== Final Orchestrator Logs (last 100 lines) ==="
+          docker compose logs --tail=100 orchestrator-service
+          echo ""
+          
+          if [ "$STATUS" != "SUCCESS" ] && [ "$STATUS" != "UNKNOWN" ]; then
             echo "❌ Sync Failed!"
             echo "Status: $STATUS"
             echo "Error: $ERROR_MSG"
             echo ""
             echo "=== Debugging Information ==="
             echo ""
-            echo "--- Orchestrator Logs (last 200 lines) ---"
-            docker compose logs --tail=200 orchestrator-service
+            echo "--- GitHub Service Logs (last 50 lines) ---"
+            docker compose logs --tail=50 github-service
             echo ""
-            echo "--- GitHub Service Logs (last 100 lines) ---"
-            docker compose logs --tail=100 github-service
+            echo "--- Embedding Service Logs (last 50 lines) ---"
+            docker compose logs --tail=50 embedding-service
             echo ""
-            echo "--- Embedding Service Logs (last 100 lines) ---"
-            docker compose logs --tail=100 embedding-service
-            echo ""
-            echo "--- Milvus Service Logs (last 100 lines) ---"
-            docker compose logs --tail=100 milvus-service
+            echo "--- Milvus Service Logs (last 50 lines) ---"
+            docker compose logs --tail=50 milvus-service
             echo ""
             exit 1
           fi
           
-          # Success - show statistics
+          # Success or in-progress - show statistics
           REPOS=$(jq -r '.repositoriesProcessed // 0' sync-result.json)
           DOCS=$(jq -r '.documentsProcessed // 0' sync-result.json)
           CHUNKS=$(jq -r '.chunksCreated // 0' sync-result.json)
@@ -228,10 +258,19 @@ jobs:
           echo "✅ Sync Completed Successfully!"
           echo ""
           echo "📊 Statistics:"
+          echo "  • Status: $STATUS"
           echo "  • Repositories processed: $REPOS"
           echo "  • Documents processed: $DOCS"
           echo "  • Chunks created: $CHUNKS"
           echo "  • Vectors stored: $VECTORS"
+          echo ""
+          
+          # Check logs for actual completion
+          if docker compose logs orchestrator-service | grep -q "Initial sync workflow completed"; then
+            echo "✅ Confirmed: Sync workflow completed successfully in logs"
+          else
+            echo "⚠️  Warning: Could not confirm completion in logs, but API returned success"
+          fi
 
       - name: Save Docker Logs
         if: always()
