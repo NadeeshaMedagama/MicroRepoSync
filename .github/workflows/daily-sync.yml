@@ -202,10 +202,14 @@ jobs:
       - name: Trigger Sync Job
         run: |
           echo "🚀 Triggering repository sync job..."
+          echo "Note: This API call blocks until sync completes (may take several minutes)"
           
+          # The /api/orchestrator/sync endpoint is synchronous - it returns only when complete
+          # Use a longer timeout (10 minutes) to allow the sync to complete
           HTTP_CODE=$(curl -s -w "%{http_code}" -X POST http://localhost:8086/api/orchestrator/sync \
             -H "Content-Type: application/json" \
-            -o sync-result.json)
+            --max-time 600 \
+            -o sync-result.json 2>&1)
           
           echo "HTTP Response Code: $HTTP_CODE"
           
@@ -220,125 +224,91 @@ jobs:
             exit 1
           fi
           
-          echo "✅ Sync job initiated successfully"
+          echo "✅ Sync API call completed"
           echo ""
-          echo "Initial response:"
-          cat sync-result.json
+          echo "Sync result:"
+          cat sync-result.json | jq . || cat sync-result.json
           echo ""
           
-          # Give the sync job time to complete - increased from 60s to 120s
-          echo "⏳ Waiting for sync to complete (this may take 2-3 minutes)..."
+          # Check the status in the response
+          SYNC_STATUS=$(cat sync-result.json | jq -r '.status // "UNKNOWN"')
+          echo "Sync Status: $SYNC_STATUS"
           
-          # Monitor logs in background
-          for i in {1..24}; do
-            sleep 5
-            echo "  ... still syncing (${i}0s elapsed) ..."
-          done
-          
-          echo "✅ Sync process should be complete now"
+          if [ "$SYNC_STATUS" == "FAILED" ]; then
+            echo "❌ Sync completed with FAILED status"
+            ERROR_MSG=$(cat sync-result.json | jq -r '.errorMessage // "No error message"')
+            echo "Error: $ERROR_MSG"
+            exit 1
+          elif [ "$SYNC_STATUS" == "SUCCESS" ]; then
+            echo "✅ Sync completed successfully!"
+          else
+            echo "⚠️ Unexpected sync status: $SYNC_STATUS"
+          fi
 
       - name: Check Sync Status
         run: |
-          echo "🔍 Verifying sync completion from logs..."
+          echo "🔍 Verifying sync completion..."
           echo ""
           
-          # 1. Search for the success message in the orchestrator logs
-          if docker compose logs orchestrator-service | grep -q "Initial sync workflow completed"; then
-            echo "✅ SUCCESS: Sync workflow completed successfully!"
-            echo ""
-            echo "Found confirmation in logs: '✅ Initial sync workflow completed'"
-            echo ""
+          # Check the sync result from the previous step
+          if [ -f sync-result.json ]; then
+            SYNC_STATUS=$(cat sync-result.json | jq -r '.status // "UNKNOWN"')
             
-            # Extract statistics from logs
-            echo "📊 Sync Statistics (from logs):"
-            docker compose logs orchestrator-service | grep -E "(repositories|documents|chunks|vectors|embeddings)" | tail -20
-            echo ""
-            
-            echo "=== Final Orchestrator Logs (last 80 lines) ==="
-            docker compose logs --tail=80 orchestrator-service
-            echo ""
-            
-            echo "=== Embedding Service Summary (last 30 lines) ==="
-            docker compose logs --tail=30 embedding-service
-            echo ""
-            
-            # Show initial API response for reference
-            if [ -f sync-result.json ]; then
-              echo "=== Initial API Response ==="
-              cat sync-result.json
+            if [ "$SYNC_STATUS" == "SUCCESS" ]; then
+              echo "✅ SUCCESS: Sync workflow completed successfully!"
               echo ""
+              
+              # Extract statistics from the response
+              echo "📊 Sync Statistics:"
+              echo "  Repositories Processed: $(cat sync-result.json | jq -r '.repositoriesProcessed // 0')"
+              echo "  Documents Processed: $(cat sync-result.json | jq -r '.documentsProcessed // 0')"
+              echo "  Chunks Created: $(cat sync-result.json | jq -r '.chunksCreated // 0')"
+              echo "  Vectors Stored: $(cat sync-result.json | jq -r '.vectorsStored // 0')"
+              echo ""
+              
+              echo "=== Final Orchestrator Logs (last 80 lines) ==="
+              docker compose logs --tail=80 orchestrator-service
+              echo ""
+              
+              exit 0
+            else
+              echo "❌ FAILURE: Sync workflow did not complete successfully"
+              echo "Status: $SYNC_STATUS"
+              ERROR_MSG=$(cat sync-result.json | jq -r '.errorMessage // "No error message"')
+              echo "Error: $ERROR_MSG"
             fi
-            
-            exit 0
           else
-            echo "❌ FAILURE: Could not find success message in logs after waiting."
-            echo "Expected log message: '✅ Initial sync workflow completed'"
-            echo ""
-            
-            echo "═══════════════════════════════════════════════════════════"
-            echo "                    🔍 DEBUG INFORMATION"
-            echo "═══════════════════════════════════════════════════════════"
-            echo ""
-            
-            echo "--- 🔴 ORCHESTRATOR SERVICE FULL LOGS (Last 300 lines) ---"
-            echo "This will show the complete error stack trace including 'Caused by'"
-            docker compose logs --tail=300 orchestrator-service
-            echo ""
-            
-            echo "--- 🔵 MILVUS SERVICE LOGS (Last 100 lines) ---"
-            echo "Check if milvus-service received any requests"
-            docker compose logs --tail=100 milvus-service
-            echo ""
-            
-            echo "--- 🟢 EMBEDDING SERVICE LOGS (Last 80 lines) ---"
-            docker compose logs --tail=80 embedding-service
-            echo ""
-            
-            echo "--- 🟡 GITHUB SERVICE LOGS (Last 50 lines) ---"
-            docker compose logs --tail=50 github-service
-            echo ""
-            
-            echo "--- 🔍 ERROR ANALYSIS ---"
-            echo "Searching for specific error patterns..."
-            echo ""
-            
-            echo "0. Which workflow step failed:"
-            if docker compose logs orchestrator-service | grep -q "STEP.*FAILED"; then
-              echo "   Found step failure:"
-              docker compose logs orchestrator-service | grep "STEP.*FAILED" | tail -5
-            else
-              echo "   No explicit step failure marker found"
-            fi
-            echo ""
-            
-            echo "1. Looking for HTTP errors (404, 500, etc.):"
-            docker compose logs orchestrator-service | grep -i -E "(404|500|503|error|exception|failed)" | tail -30 || echo "   No HTTP errors found"
-            echo ""
-            
-            echo "2. Looking for WebClient errors:"
-            docker compose logs orchestrator-service | grep -i -E "(webclient|reactive|block terminated)" | tail -20 || echo "   No WebClient errors found"
-            echo ""
-            
-            echo "3. Looking for connection errors:"
-            docker compose logs orchestrator-service | grep -i -E "(connection|refused|timeout|unreachable)" | tail -20 || echo "   No connection errors found"
-            echo ""
-            
-            echo "4. Checking if milvus-service received API requests (excluding health checks):"
-            if docker compose logs milvus-service | grep -E "(POST|PUT|DELETE)" | grep -v "actuator/health" | grep -q .; then
-              echo "   ✅ Milvus service DID receive API requests"
-              docker compose logs milvus-service | grep -E "(POST|PUT|DELETE)" | grep -v "actuator/health" | tail -10
-            elif docker compose logs milvus-service | grep "GET" | grep -v "actuator/health" | grep -q "/api/milvus"; then
-              echo "   ✅ Milvus service received GET API requests"
-              docker compose logs milvus-service | grep "GET" | grep -v "actuator/health" | grep "/api/milvus" | tail -10
-            else
-              echo "   ❌ Milvus service received NO API requests (orchestrator never called it!)"
-              echo "   Only health checks were received:"
-              docker compose logs milvus-service | grep "GET.*actuator/health" | wc -l | xargs echo "   Health check count:"
-            fi
-            echo ""
-            
-            exit 1
+            echo "❌ FAILURE: sync-result.json not found"
           fi
+          
+          echo ""
+          echo "═══════════════════════════════════════════════════════════"
+          echo "                    🔍 DEBUG INFORMATION"
+          echo "═══════════════════════════════════════════════════════════"
+          echo ""
+          
+          echo "--- 🔴 ORCHESTRATOR SERVICE FULL LOGS (Last 300 lines) ---"
+          docker compose logs --tail=300 orchestrator-service
+          echo ""
+          
+          echo "--- 🔵 MILVUS SERVICE LOGS (Last 100 lines) ---"
+          docker compose logs --tail=100 milvus-service
+          echo ""
+          
+          echo "--- 🟢 EMBEDDING SERVICE LOGS (Last 80 lines) ---"
+          docker compose logs --tail=80 embedding-service
+          echo ""
+          
+          echo "--- 🟡 GITHUB SERVICE LOGS (Last 50 lines) ---"
+          docker compose logs --tail=50 github-service
+          echo ""
+          
+          echo "--- 🔍 ERROR ANALYSIS ---"
+          echo "Looking for errors in orchestrator logs:"
+          docker compose logs orchestrator-service | grep -i -E "(error|exception|failed|timeout)" | tail -30 || echo "   No errors found"
+          echo ""
+          
+          exit 1
 
       - name: Save Docker Logs
         if: always()
