@@ -59,6 +59,34 @@ jobs:
             echo "✅ AZURE_OPENAI_ENDPOINT is set"
           fi
           
+          if [ -z "${{ secrets.AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT }}" ]; then
+            echo "❌ CRITICAL ERROR: AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT secret is EMPTY!"
+            exit 1
+          else
+            echo "✅ AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT is set"
+          fi
+          
+          if [ -z "${{ secrets.MILVUS_URI }}" ]; then
+            echo "❌ CRITICAL ERROR: MILVUS_URI secret is EMPTY!"
+            exit 1
+          else
+            echo "✅ MILVUS_URI is set"
+          fi
+          
+          if [ -z "${{ secrets.MILVUS_TOKEN }}" ]; then
+            echo "❌ CRITICAL ERROR: MILVUS_TOKEN secret is EMPTY!"
+            exit 1
+          else
+            echo "✅ MILVUS_TOKEN is set"
+          fi
+          
+          if [ -z "${{ secrets.MILVUS_COLLECTION_NAME }}" ]; then
+            echo "❌ CRITICAL ERROR: MILVUS_COLLECTION_NAME secret is EMPTY!"
+            exit 1
+          else
+            echo "✅ MILVUS_COLLECTION_NAME is set"
+          fi
+          
           if [ -z "${{ secrets.REPOSYNC_ORGANIZATION }}" ]; then
             echo "⚠️  WARNING: REPOSYNC_ORGANIZATION secret is EMPTY - will sync all repos"
           else
@@ -66,7 +94,7 @@ jobs:
           fi
           
           echo "✅ All critical secrets are configured"
-          echo "ℹ️  Note: Using internal Docker Milvus (milvus-standalone) for CI runs"
+          echo "ℹ️  Note: Using Zilliz Cloud Milvus for vector storage"
 
       - name: Start Services with Docker Compose
         run: |
