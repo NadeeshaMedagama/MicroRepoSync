@@ -31,7 +31,10 @@ public class MilvusConfig {
         // 2. Use the SDK's built-in URI parser (Safe & Standard)
         // This automatically handles http://host:port format
         ConnectParam.Builder builder = ConnectParam.newBuilder()
-                .withUri(milvusUri);
+                .withUri(milvusUri)
+                .withConnectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                .withKeepAliveTime(60, java.util.concurrent.TimeUnit.SECONDS)
+                .withKeepAliveTimeout(30, java.util.concurrent.TimeUnit.SECONDS);
 
         // 3. Add token only if provided and not empty
         if (milvusToken != null && !milvusToken.trim().isEmpty()) {
@@ -42,12 +45,16 @@ public class MilvusConfig {
         }
 
         try {
-            return new MilvusServiceClient(builder.build());
+            MilvusServiceClient client = new MilvusServiceClient(builder.build());
+            System.out.println("✅ Milvus client created successfully");
+            return client;
         } catch (Exception e) {
             // Catch SDK-specific errors (like bad URI format) and rethrow clearly
+            System.err.println("❌ Failed to initialize Milvus Client: " + e.getMessage());
+            e.printStackTrace();
             throw new IllegalStateException(
                 "Failed to initialize Milvus Client with URI: " + milvusUri +
-                ". Ensure the URI format is correct (e.g., http://host:port)",
+                ". Error: " + e.getMessage(),
                 e
             );
         }
