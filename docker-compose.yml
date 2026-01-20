@@ -71,6 +71,10 @@ services:
       - REPOSYNC_ORGANIZATION
       - REPOSYNC_FILTER_KEYWORD
       - REPOSYNC_GITHUB_TOKEN
+      # Debug logging to see incoming requests
+      - LOGGING_LEVEL_ROOT=INFO
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB=DEBUG
+      - LOGGING_LEVEL_COM_REPOSYNC=DEBUG
     networks:
       - reposync-network
     healthcheck:
@@ -96,6 +100,12 @@ services:
       - PROCESSOR_SERVICE_URL=http://document-processor-service:8082
       - EMBEDDING_SERVICE_URL=http://embedding-service:8083
       - MILVUS_SERVICE_URL=http://milvus-service:8084
+      # Debug logging to capture full error details
+      - LOGGING_LEVEL_ROOT=INFO
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB=DEBUG
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_REACTIVE_FUNCTION_CLIENT=DEBUG
+      - LOGGING_LEVEL_COM_REPOSYNC=DEBUG
+      - LOGGING_LEVEL_REACTOR_NETTY=DEBUG
     networks:
       - reposync-network
     depends_on:
