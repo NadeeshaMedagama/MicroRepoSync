@@ -167,7 +167,7 @@ docker-compose ps
 docker-compose logs -f orchestrator-service
 
 # Health checks
-curl http://localhost:8080/actuator/health  # Orchestrator
+curl http://localhost:8086/actuator/health  # Orchestrator
 curl http://localhost:8081/actuator/health  # GitHub Service
 curl http://localhost:8082/actuator/health  # Document Processor
 curl http://localhost:8083/actuator/health  # Embedding Service
@@ -177,7 +177,7 @@ curl http://localhost:8084/actuator/health  # Milvus Service
 ### 4. Trigger Sync
 
 ```bash
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 ```
 
 ### 5. Set Up GitHub Actions
