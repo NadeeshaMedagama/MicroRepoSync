@@ -1,9 +1,14 @@
 server:
   port: 8086
+  netty:
+    connection-timeout: 60s
+    idle-timeout: 300s
 
 spring:
   application:
     name: orchestrator-service
+  codec:
+    max-in-memory-size: 16MB
 
 reposync:
   organization: ${REPOSYNC_ORGANIZATION}
