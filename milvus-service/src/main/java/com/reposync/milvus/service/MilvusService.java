@@ -88,12 +88,13 @@ public class MilvusService {
 
     private void createIndex(String collectionName, int dimension) {
         try {
+            // Use AUTOINDEX for better compatibility with Zilliz Cloud
+            // AUTOINDEX automatically selects the optimal index type based on data
             io.milvus.param.index.CreateIndexParam indexParam = io.milvus.param.index.CreateIndexParam.newBuilder()
                     .withCollectionName(collectionName)
                     .withFieldName(VECTOR_FIELD)
-                    .withIndexType(io.milvus.param.IndexType.IVF_FLAT)
-                    .withMetricType(io.milvus.param.MetricType.L2)
-                    .withExtraParam("{\"nlist\":1024}")
+                    .withIndexType(io.milvus.param.IndexType.AUTOINDEX)
+                    .withMetricType(io.milvus.param.MetricType.COSINE)
                     .build();
 
             R<RpcStatus> response = milvusClient.createIndex(indexParam);
