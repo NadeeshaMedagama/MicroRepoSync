@@ -239,11 +239,20 @@ jobs:
             ERROR_MSG=$(cat sync-result.json | jq -r '.errorMessage // "No error message"')
             echo "Error: $ERROR_MSG"
             echo ""
-            echo "=== Milvus Service Logs (last 100 lines) ==="
-            docker compose logs --tail=100 milvus-service
+            echo "════════════════════════════════════════════════════════════"
+            echo "                    MILVUS SERVICE LOGS"
+            echo "════════════════════════════════════════════════════════════"
+            docker compose logs --tail=200 milvus-service
             echo ""
-            echo "=== Orchestrator Service Logs (last 100 lines) ==="
-            docker compose logs --tail=100 orchestrator-service
+            echo "════════════════════════════════════════════════════════════"
+            echo "                 ORCHESTRATOR SERVICE LOGS"
+            echo "════════════════════════════════════════════════════════════"
+            docker compose logs --tail=150 orchestrator-service
+            echo ""
+            echo "════════════════════════════════════════════════════════════"
+            echo "                   EMBEDDING SERVICE LOGS"
+            echo "════════════════════════════════════════════════════════════"
+            docker compose logs --tail=50 embedding-service
             exit 1
           elif [ "$SYNC_STATUS" == "SUCCESS" ]; then
             echo "✅ Sync completed successfully!"
