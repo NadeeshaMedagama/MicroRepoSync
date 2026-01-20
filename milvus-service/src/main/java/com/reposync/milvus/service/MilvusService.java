@@ -68,8 +68,14 @@ public class MilvusService {
 
             R<RpcStatus> response = milvusClient.createCollection(createCollectionParam);
 
+            log.info("Milvus createCollection response - Status: {}, Message: {}",
+                    response.getStatus(), response.getMessage());
+
             if (response.getStatus() != R.Status.Success.getCode()) {
-                throw new RuntimeException("Failed to create collection: " + response.getMessage());
+                String errorMsg = String.format("Milvus createCollection failed with status %d: %s",
+                        response.getStatus(), response.getMessage());
+                log.error(errorMsg);
+                throw new RuntimeException(errorMsg);
             }
 
             log.info("Collection {} created successfully", collectionName);
@@ -82,22 +88,26 @@ public class MilvusService {
 
         } catch (Exception e) {
             log.error("Error creating collection {}: {}", collectionName, e.getMessage(), e);
-            throw new RuntimeException("Failed to create collection", e);
+            throw new RuntimeException("Failed to create collection: " + e.getMessage(), e);
         }
     }
 
     private void createIndex(String collectionName, int dimension) {
         try {
-            // Use AUTOINDEX for better compatibility with Zilliz Cloud
-            // AUTOINDEX automatically selects the optimal index type based on data
+            // Use HNSW index for better compatibility with Zilliz Cloud
+            // HNSW provides good search performance for high-dimensional vectors
             io.milvus.param.index.CreateIndexParam indexParam = io.milvus.param.index.CreateIndexParam.newBuilder()
                     .withCollectionName(collectionName)
                     .withFieldName(VECTOR_FIELD)
-                    .withIndexType(io.milvus.param.IndexType.AUTOINDEX)
+                    .withIndexType(io.milvus.param.IndexType.HNSW)
                     .withMetricType(io.milvus.param.MetricType.COSINE)
+                    .withExtraParam("{\"M\":16,\"efConstruction\":256}")
                     .build();
 
             R<RpcStatus> response = milvusClient.createIndex(indexParam);
+
+            log.info("Milvus createIndex response - Status: {}, Message: {}",
+                    response.getStatus(), response.getMessage());
 
             if (response.getStatus() != R.Status.Success.getCode()) {
                 log.warn("Failed to create index: {}", response.getMessage());
@@ -106,6 +116,7 @@ public class MilvusService {
             }
         } catch (Exception e) {
             log.error("Error creating index: {}", e.getMessage(), e);
+            // Don't throw - allow collection to work without index if needed
         }
     }
 
@@ -182,14 +193,25 @@ public class MilvusService {
 
     public boolean hasCollection(String collectionName) {
         try {
+            log.debug("Checking if collection {} exists", collectionName);
             HasCollectionParam param = HasCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
                     .build();
 
             R<Boolean> response = milvusClient.hasCollection(param);
+
+            log.debug("hasCollection response - Status: {}, Data: {}, Message: {}",
+                    response.getStatus(), response.getData(), response.getMessage());
+
+            if (response.getStatus() != R.Status.Success.getCode()) {
+                log.warn("hasCollection check failed with status {}: {}",
+                        response.getStatus(), response.getMessage());
+                return false;
+            }
+
             return response.getData() != null && response.getData();
         } catch (Exception e) {
-            log.error("Error checking collection existence: {}", e.getMessage(), e);
+            log.error("Error checking collection existence for {}: {}", collectionName, e.getMessage(), e);
             return false;
         }
     }
