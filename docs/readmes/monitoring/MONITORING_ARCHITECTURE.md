@@ -6,7 +6,7 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         CLIENT / USER INTERFACE                              │
 │                                                                              │
-│  Browser → http://localhost:3000 (Grafana Dashboards)                      │
+│  Browser → http://localhost:3030 (Grafana Dashboards)                      │
 │  CLI → curl http://localhost:8085/api/monitoring (Monitoring API)          │
 │  Browser → http://localhost:9090 (Prometheus UI)                           │
 └─────────────────────────────────────────────────────────────────────────────┘
