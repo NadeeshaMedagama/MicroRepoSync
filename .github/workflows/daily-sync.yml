@@ -238,6 +238,12 @@ jobs:
             echo "❌ Sync completed with FAILED status"
             ERROR_MSG=$(cat sync-result.json | jq -r '.errorMessage // "No error message"')
             echo "Error: $ERROR_MSG"
+            echo ""
+            echo "=== Milvus Service Logs (last 100 lines) ==="
+            docker compose logs --tail=100 milvus-service
+            echo ""
+            echo "=== Orchestrator Service Logs (last 100 lines) ==="
+            docker compose logs --tail=100 orchestrator-service
             exit 1
           elif [ "$SYNC_STATUS" == "SUCCESS" ]; then
             echo "✅ Sync completed successfully!"
