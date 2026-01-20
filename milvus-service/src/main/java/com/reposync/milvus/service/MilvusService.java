@@ -38,6 +38,8 @@ public class MilvusService {
                 return;
             }
 
+            log.info("Creating collection {} with dimension {}", collectionName, dimension);
+
             // Define collection schema
             FieldType idField = FieldType.newBuilder()
                     .withName(ID_FIELD)
@@ -53,9 +55,11 @@ public class MilvusService {
                     .withDimension(dimension)
                     .build();
 
+            // Use VarChar for metadata instead of JSON for better compatibility with Zilliz Cloud
             FieldType metadataField = FieldType.newBuilder()
                     .withName(METADATA_FIELD)
-                    .withDataType(DataType.JSON)
+                    .withDataType(DataType.VarChar)
+                    .withMaxLength(65535)
                     .build();
 
             CreateCollectionParam createCollectionParam = CreateCollectionParam.newBuilder()
@@ -66,6 +70,7 @@ public class MilvusService {
                     .addFieldType(metadataField)
                     .build();
 
+            log.debug("Sending createCollection request to Milvus...");
             R<RpcStatus> response = milvusClient.createCollection(createCollectionParam);
 
             log.info("Milvus createCollection response - Status: {}, Message: {}",
@@ -80,10 +85,10 @@ public class MilvusService {
 
             log.info("Collection {} created successfully", collectionName);
 
-            // Create index for vector field
+            // Create index for vector field (required before loading on some Milvus versions)
             createIndex(collectionName, dimension);
 
-            // Load collection into memory
+            // Load collection into memory (may be automatic on Zilliz Cloud Serverless)
             loadCollection(collectionName);
 
         } catch (Exception e) {
@@ -94,14 +99,16 @@ public class MilvusService {
 
     private void createIndex(String collectionName, int dimension) {
         try {
-            // Use HNSW index for better compatibility with Zilliz Cloud
-            // HNSW provides good search performance for high-dimensional vectors
+            log.info("Creating index for collection {} on field {}", collectionName, VECTOR_FIELD);
+
+            // Use AUTOINDEX for Zilliz Cloud compatibility
+            // For self-hosted Milvus, this will create an appropriate index automatically
             io.milvus.param.index.CreateIndexParam indexParam = io.milvus.param.index.CreateIndexParam.newBuilder()
                     .withCollectionName(collectionName)
                     .withFieldName(VECTOR_FIELD)
-                    .withIndexType(io.milvus.param.IndexType.HNSW)
+                    .withIndexName("vector_idx")
+                    .withIndexType(io.milvus.param.IndexType.AUTOINDEX)
                     .withMetricType(io.milvus.param.MetricType.COSINE)
-                    .withExtraParam("{\"M\":16,\"efConstruction\":256}")
                     .build();
 
             R<RpcStatus> response = milvusClient.createIndex(indexParam);
@@ -110,29 +117,39 @@ public class MilvusService {
                     response.getStatus(), response.getMessage());
 
             if (response.getStatus() != R.Status.Success.getCode()) {
-                log.warn("Failed to create index: {}", response.getMessage());
+                // On Zilliz Cloud Serverless, index might be auto-created, so just log warning
+                log.warn("Index creation returned non-success status (may be auto-indexed): {}", response.getMessage());
             } else {
                 log.info("Index created successfully for collection {}", collectionName);
             }
         } catch (Exception e) {
-            log.error("Error creating index: {}", e.getMessage(), e);
-            // Don't throw - allow collection to work without index if needed
+            // Don't fail if index creation fails - Zilliz Cloud Serverless auto-indexes
+            log.warn("Index creation exception (may be auto-indexed on Zilliz Cloud): {}", e.getMessage());
         }
     }
 
     private void loadCollection(String collectionName) {
         try {
+            log.info("Loading collection {} into memory", collectionName);
+
             LoadCollectionParam loadParam = LoadCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
                     .build();
 
             R<RpcStatus> response = milvusClient.loadCollection(loadParam);
 
+            log.info("Milvus loadCollection response - Status: {}, Message: {}",
+                    response.getStatus(), response.getMessage());
+
             if (response.getStatus() == R.Status.Success.getCode()) {
                 log.info("Collection {} loaded into memory", collectionName);
+            } else {
+                // On Zilliz Cloud Serverless, collections are auto-loaded
+                log.warn("Load collection returned non-success (may be auto-loaded): {}", response.getMessage());
             }
         } catch (Exception e) {
-            log.error("Error loading collection: {}", e.getMessage(), e);
+            // Don't fail if load fails - Zilliz Cloud Serverless auto-loads
+            log.warn("Load collection exception (may be auto-loaded on Zilliz Cloud): {}", e.getMessage());
         }
     }
 
