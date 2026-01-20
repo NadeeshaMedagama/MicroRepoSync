@@ -21,16 +21,28 @@ public class MilvusController {
     public ResponseEntity<String> createCollection(@RequestParam String collectionName,
                                                     @RequestParam int dimension) {
         log.info("Creating collection: {} with dimension: {}", collectionName, dimension);
-        milvusService.createCollection(collectionName, dimension);
-        return ResponseEntity.ok("Collection created successfully");
+        try {
+            milvusService.createCollection(collectionName, dimension);
+            return ResponseEntity.ok("Collection created successfully");
+        } catch (Exception e) {
+            log.error("Failed to create collection {}: {}", collectionName, e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body("Failed to create collection: " + e.getMessage());
+        }
     }
 
     @PostMapping("/vectors/upsert")
     public ResponseEntity<String> upsertVectors(@RequestParam String collectionName,
                                                  @RequestBody List<EmbeddingVector> vectors) {
         log.info("Upserting {} vectors to collection: {}", vectors.size(), collectionName);
-        milvusService.upsertVectors(collectionName, vectors);
-        return ResponseEntity.ok("Vectors upserted successfully");
+        try {
+            milvusService.upsertVectors(collectionName, vectors);
+            return ResponseEntity.ok("Vectors upserted successfully");
+        } catch (Exception e) {
+            log.error("Failed to upsert vectors to {}: {}", collectionName, e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body("Failed to upsert vectors: " + e.getMessage());
+        }
     }
 
     @DeleteMapping("/collection/{collectionName}")
