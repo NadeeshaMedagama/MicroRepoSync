@@ -197,7 +197,7 @@ The pre-configured dashboard includes:
 
 ### Creating Custom Dashboards
 
-1. Login to Grafana (http://localhost:3000)
+1. Login to Grafana (http://localhost:3030)
 2. Click "+" → "Dashboard"
 3. Add panels with Prometheus queries
 4. Save the dashboard
