@@ -275,27 +275,52 @@ jobs:
             echo "Expected log message: '✅ Initial sync workflow completed'"
             echo ""
             
-            echo "=== Debugging Information ==="
-            echo ""
-            echo "--- Orchestrator Service Logs (last 150 lines) ---"
-            docker compose logs --tail=150 orchestrator-service
+            echo "═══════════════════════════════════════════════════════════"
+            echo "                    🔍 DEBUG INFORMATION"
+            echo "═══════════════════════════════════════════════════════════"
             echo ""
             
-            echo "--- GitHub Service Logs (last 50 lines) ---"
+            echo "--- 🔴 ORCHESTRATOR SERVICE FULL LOGS (Last 300 lines) ---"
+            echo "This will show the complete error stack trace including 'Caused by'"
+            docker compose logs --tail=300 orchestrator-service
+            echo ""
+            
+            echo "--- 🔵 MILVUS SERVICE LOGS (Last 100 lines) ---"
+            echo "Check if milvus-service received any requests"
+            docker compose logs --tail=100 milvus-service
+            echo ""
+            
+            echo "--- 🟢 EMBEDDING SERVICE LOGS (Last 80 lines) ---"
+            docker compose logs --tail=80 embedding-service
+            echo ""
+            
+            echo "--- 🟡 GITHUB SERVICE LOGS (Last 50 lines) ---"
             docker compose logs --tail=50 github-service
             echo ""
             
-            echo "--- Embedding Service Logs (last 50 lines) ---"
-            docker compose logs --tail=50 embedding-service
+            echo "--- 🔍 ERROR ANALYSIS ---"
+            echo "Searching for specific error patterns..."
             echo ""
             
-            echo "--- Milvus Service Logs (last 50 lines) ---"
-            docker compose logs --tail=50 milvus-service
+            echo "1. Looking for HTTP errors (404, 500, etc.):"
+            docker compose logs orchestrator-service | grep -i -E "(404|500|503|error|exception|failed)" | tail -30 || echo "   No HTTP errors found"
             echo ""
             
-            # Check for errors in logs
-            echo "--- Searching for ERROR messages ---"
-            docker compose logs orchestrator-service | grep -i error | tail -20 || echo "No errors found"
+            echo "2. Looking for WebClient errors:"
+            docker compose logs orchestrator-service | grep -i -E "(webclient|reactive|block terminated)" | tail -20 || echo "   No WebClient errors found"
+            echo ""
+            
+            echo "3. Looking for connection errors:"
+            docker compose logs orchestrator-service | grep -i -E "(connection|refused|timeout|unreachable)" | tail -20 || echo "   No connection errors found"
+            echo ""
+            
+            echo "4. Checking if milvus-service received requests:"
+            if docker compose logs milvus-service | grep -q -E "(POST|GET|PUT|DELETE)"; then
+              echo "   ✅ Milvus service DID receive requests"
+              docker compose logs milvus-service | grep -E "(POST|GET|PUT|DELETE)" | tail -10
+            else
+              echo "   ❌ Milvus service received NO requests (orchestrator never called it!)"
+            fi
             echo ""
             
             exit 1
