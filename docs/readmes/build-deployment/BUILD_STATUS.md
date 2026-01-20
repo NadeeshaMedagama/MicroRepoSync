@@ -49,7 +49,7 @@ docker-compose up -d
 
 ### 3. Trigger Sync
 ```bash
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 ```
 
 ## Troubleshooting
