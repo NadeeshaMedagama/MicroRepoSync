@@ -239,65 +239,66 @@ jobs:
 
       - name: Check Sync Status
         run: |
-          if [ ! -f sync-result.json ]; then
-            echo "❌ Error: sync-result.json not found"
-            exit 1
-          fi
-          
-          echo "=== Sync Result JSON ==="
-          cat sync-result.json
-          echo "========================"
+          echo "🔍 Verifying sync completion from logs..."
           echo ""
           
-          # Extract status
-          STATUS=$(jq -r '.status // "UNKNOWN"' sync-result.json)
-          ERROR_MSG=$(jq -r '.errorMessage // "N/A"' sync-result.json)
-          
-          # Show final logs
-          echo "=== Final Orchestrator Logs (last 100 lines) ==="
-          docker compose logs --tail=100 orchestrator-service
-          echo ""
-          
-          if [ "$STATUS" != "SUCCESS" ] && [ "$STATUS" != "UNKNOWN" ]; then
-            echo "❌ Sync Failed!"
-            echo "Status: $STATUS"
-            echo "Error: $ERROR_MSG"
+          # 1. Search for the success message in the orchestrator logs
+          if docker compose logs orchestrator-service | grep -q "Initial sync workflow completed"; then
+            echo "✅ SUCCESS: Sync workflow completed successfully!"
             echo ""
+            echo "Found confirmation in logs: '✅ Initial sync workflow completed'"
+            echo ""
+            
+            # Extract statistics from logs
+            echo "📊 Sync Statistics (from logs):"
+            docker compose logs orchestrator-service | grep -E "(repositories|documents|chunks|vectors|embeddings)" | tail -20
+            echo ""
+            
+            echo "=== Final Orchestrator Logs (last 80 lines) ==="
+            docker compose logs --tail=80 orchestrator-service
+            echo ""
+            
+            echo "=== Embedding Service Summary (last 30 lines) ==="
+            docker compose logs --tail=30 embedding-service
+            echo ""
+            
+            # Show initial API response for reference
+            if [ -f sync-result.json ]; then
+              echo "=== Initial API Response ==="
+              cat sync-result.json
+              echo ""
+            fi
+            
+            exit 0
+          else
+            echo "❌ FAILURE: Could not find success message in logs after waiting."
+            echo "Expected log message: '✅ Initial sync workflow completed'"
+            echo ""
+            
             echo "=== Debugging Information ==="
             echo ""
+            echo "--- Orchestrator Service Logs (last 150 lines) ---"
+            docker compose logs --tail=150 orchestrator-service
+            echo ""
+            
             echo "--- GitHub Service Logs (last 50 lines) ---"
             docker compose logs --tail=50 github-service
             echo ""
+            
             echo "--- Embedding Service Logs (last 50 lines) ---"
             docker compose logs --tail=50 embedding-service
             echo ""
+            
             echo "--- Milvus Service Logs (last 50 lines) ---"
             docker compose logs --tail=50 milvus-service
             echo ""
+            
+            # Check for errors in logs
+            echo "--- Searching for ERROR messages ---"
+            docker compose logs orchestrator-service | grep -i error | tail -20 || echo "No errors found"
+            echo ""
+            
             exit 1
-          fi
-          
-          # Success or in-progress - show statistics
-          REPOS=$(jq -r '.repositoriesProcessed // 0' sync-result.json)
-          DOCS=$(jq -r '.documentsProcessed // 0' sync-result.json)
-          CHUNKS=$(jq -r '.chunksCreated // 0' sync-result.json)
-          VECTORS=$(jq -r '.vectorsStored // 0' sync-result.json)
-          
-          echo "✅ Sync Completed Successfully!"
-          echo ""
-          echo "📊 Statistics:"
-          echo "  • Status: $STATUS"
-          echo "  • Repositories processed: $REPOS"
-          echo "  • Documents processed: $DOCS"
-          echo "  • Chunks created: $CHUNKS"
-          echo "  • Vectors stored: $VECTORS"
-          echo ""
-          
-          # Check logs for actual completion
-          if docker compose logs orchestrator-service | grep -q "Initial sync workflow completed"; then
-            echo "✅ Confirmed: Sync workflow completed successfully in logs"
-          else
-            echo "⚠️  Warning: Could not confirm completion in logs, but API returned success"
           fi
 
       - name: Save Docker Logs
