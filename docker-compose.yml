@@ -8,7 +8,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - REPOSYNC_GITHUB_TOKEN=${REPOSYNC_GITHUB_TOKEN}
+      - REPOSYNC_GITHUB_TOKEN
     networks:
       - reposync-network
     healthcheck:
@@ -42,9 +42,9 @@ services:
     ports:
       - "8083:8083"
     environment:
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
-      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
-      - AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}
+      - AZURE_OPENAI_API_KEY
+      - AZURE_OPENAI_ENDPOINT
+      - AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT
     networks:
       - reposync-network
     healthcheck:
@@ -62,9 +62,15 @@ services:
     ports:
       - "8084:8084"
     environment:
-      - MILVUS_URI=${MILVUS_URI}
-      - MILVUS_TOKEN=${MILVUS_TOKEN}
-      - MILVUS_COLLECTION_NAME=${MILVUS_COLLECTION_NAME}
+      - AZURE_OPENAI_API_KEY
+      - AZURE_OPENAI_ENDPOINT
+      - AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT
+      - MILVUS_URI
+      - MILVUS_TOKEN
+      - MILVUS_COLLECTION_NAME
+      - REPOSYNC_ORGANIZATION
+      - REPOSYNC_FILTER_KEYWORD
+      - REPOSYNC_GITHUB_TOKEN
     networks:
       - reposync-network
     healthcheck:
@@ -82,9 +88,10 @@ services:
     ports:
       - "8086:8086"
     environment:
-      - REPOSYNC_ORGANIZATION=${REPOSYNC_ORGANIZATION}
-      - REPOSYNC_FILTER_KEYWORD=${REPOSYNC_FILTER_KEYWORD}
-      - MILVUS_COLLECTION_NAME=${MILVUS_COLLECTION_NAME}
+      - REPOSYNC_ORGANIZATION
+      - REPOSYNC_FILTER_KEYWORD
+      - REPOSYNC_AUTO_SYNC_ON_STARTUP
+      - MILVUS_COLLECTION_NAME
       - GITHUB_SERVICE_URL=http://github-service:8081
       - PROCESSOR_SERVICE_URL=http://document-processor-service:8082
       - EMBEDDING_SERVICE_URL=http://embedding-service:8083
