@@ -146,25 +146,39 @@ public class WorkflowOrchestrator {
 
             // Step 5: Ensure Milvus collection exists
             log.info("Step 5: Ensuring Milvus collection exists: {}", collectionName);
+            long step5Start = System.currentTimeMillis();
             try {
+                log.info("Calling Milvus service to check/create collection...");
                 ensureCollection();
-                log.info("✓ Step 5 complete - Collection ready");
+                long step5Duration = System.currentTimeMillis() - step5Start;
+                log.info("✓ Step 5 complete - Collection ready (took {}ms)", step5Duration);
             } catch (Exception e) {
-                System.err.println("✗ STEP 5 FAILED - Error ensuring Milvus collection");
+                long step5Duration = System.currentTimeMillis() - step5Start;
+                System.err.println("✗ STEP 5 FAILED - Error ensuring Milvus collection (after " + step5Duration + "ms)");
                 System.err.println("Error: " + e.getMessage());
-                log.error("✗ Step 5 FAILED - Error ensuring collection: {}", e.getMessage(), e);
+                if (e.getCause() != null) {
+                    System.err.println("Cause: " + e.getCause().getMessage());
+                }
+                log.error("✗ Step 5 FAILED - Error ensuring collection after {}ms: {}", step5Duration, e.getMessage(), e);
                 throw new RuntimeException("Step 5 failed: " + e.getMessage(), e);
             }
 
             // Step 6: Upsert vectors to Milvus
             log.info("Step 6: Upserting {} vectors to Milvus", vectors.size());
+            long step6Start = System.currentTimeMillis();
             try {
+                log.info("Calling Milvus service to upsert {} vectors...", vectors.size());
                 upsertVectors(vectors);
-                log.info("✓ Step 6 complete - Vectors upserted");
+                long step6Duration = System.currentTimeMillis() - step6Start;
+                log.info("✓ Step 6 complete - Vectors upserted (took {}ms)", step6Duration);
             } catch (Exception e) {
-                System.err.println("✗ STEP 6 FAILED - Error upserting vectors");
+                long step6Duration = System.currentTimeMillis() - step6Start;
+                System.err.println("✗ STEP 6 FAILED - Error upserting vectors (after " + step6Duration + "ms)");
                 System.err.println("Error: " + e.getMessage());
-                log.error("✗ Step 6 FAILED - Error upserting vectors: {}", e.getMessage(), e);
+                if (e.getCause() != null) {
+                    System.err.println("Cause: " + e.getCause().getMessage());
+                }
+                log.error("✗ Step 6 FAILED - Error upserting vectors after {}ms: {}", step6Duration, e.getMessage(), e);
                 throw new RuntimeException("Step 6 failed: " + e.getMessage(), e);
             }
 
@@ -291,20 +305,29 @@ public class WorkflowOrchestrator {
 
     private void ensureCollection() {
         try {
-            log.debug("Checking if collection '{}' exists", collectionName);
+            log.info("Checking if collection '{}' exists via Milvus service", collectionName);
 
             Boolean exists = milvusWebClient.get()
                     .uri("/api/milvus/collection/{collectionName}/exists", collectionName)
                     .retrieve()
                     .onStatus(status -> !status.is2xxSuccessful(),
                             response -> response.bodyToMono(String.class)
-                                    .map(body -> new RuntimeException("Milvus service error checking collection: " + response.statusCode() + " - " + body)))
+                                    .map(body -> {
+                                        log.error("Milvus collection check failed with status {}: {}",
+                                                response.statusCode(), body);
+                                        return new RuntimeException("Milvus service error checking collection: " +
+                                                response.statusCode() + " - " + body);
+                                    }))
                     .bodyToMono(Boolean.class)
+                    .doOnError(error -> log.error("Milvus collection check error: {} - {}",
+                            error.getClass().getSimpleName(), error.getMessage()))
                     .block();
+
+            log.info("Collection '{}' exists check result: {}", collectionName, exists);
 
             if (exists == null || !exists) {
                 log.info("Collection '{}' does not exist, creating it with dimension {}", collectionName, vectorDimension);
-                milvusWebClient.post()
+                String createResponse = milvusWebClient.post()
                         .uri(uriBuilder -> uriBuilder
                                 .path("/api/milvus/collection/create")
                                 .queryParam("collectionName", collectionName)
@@ -313,24 +336,48 @@ public class WorkflowOrchestrator {
                         .retrieve()
                         .onStatus(status -> !status.is2xxSuccessful(),
                                 response -> response.bodyToMono(String.class)
-                                        .map(body -> new RuntimeException("Milvus service error creating collection: " + response.statusCode() + " - " + body)))
+                                        .map(body -> {
+                                            log.error("Milvus collection create failed with status {}: {}",
+                                                    response.statusCode(), body);
+                                            return new RuntimeException("Milvus service error creating collection: " +
+                                                    response.statusCode() + " - " + body);
+                                        }))
                         .bodyToMono(String.class)
+                        .doOnError(error -> log.error("Milvus collection create error: {} - {}",
+                                error.getClass().getSimpleName(), error.getMessage()))
                         .block();
-                log.info("Collection '{}' created successfully", collectionName);
+                log.info("Collection '{}' created successfully, response: {}", collectionName, createResponse);
             } else {
-                log.debug("Collection '{}' already exists", collectionName);
+                log.info("Collection '{}' already exists", collectionName);
             }
         } catch (Exception e) {
-            log.error("Failed to ensure Milvus collection exists: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to ensure Milvus collection exists: " + e.getMessage(), e);
+            String errorType = e.getClass().getSimpleName();
+            String errorMsg = e.getMessage();
+
+            // Check for timeout-related errors
+            if (errorMsg != null && (errorMsg.contains("timeout") || errorMsg.contains("Timeout"))) {
+                log.error("Milvus ensureCollection TIMEOUT: {} - {}", errorType, errorMsg);
+            }
+
+            log.error("Failed to ensure Milvus collection exists: {} - {}", errorType, errorMsg, e);
+            throw new RuntimeException("Failed to ensure Milvus collection exists: " + errorMsg, e);
         }
     }
 
     private void upsertVectors(List<EmbeddingVector> vectors) {
         try {
-            log.debug("Upserting {} vectors to collection '{}'", vectors.size(), collectionName);
+            log.info("Upserting {} vectors to collection '{}' via Milvus service", vectors.size(), collectionName);
 
-            milvusWebClient.post()
+            // Log first vector details for debugging
+            if (!vectors.isEmpty()) {
+                EmbeddingVector first = vectors.get(0);
+                log.debug("First vector: id={}, dimension={}, metadata={}",
+                        first.getId(),
+                        first.getVector() != null ? first.getVector().size() : 0,
+                        first.getMetadata() != null ? first.getMetadata().keySet() : "null");
+            }
+
+            String response = milvusWebClient.post()
                     .uri(uriBuilder -> uriBuilder
                             .path("/api/milvus/vectors/upsert")
                             .queryParam("collectionName", collectionName)
@@ -338,15 +385,33 @@ public class WorkflowOrchestrator {
                     .bodyValue(vectors)
                     .retrieve()
                     .onStatus(status -> !status.is2xxSuccessful(),
-                            response -> response.bodyToMono(String.class)
-                                    .map(body -> new RuntimeException("Milvus service error upserting vectors: " + response.statusCode() + " - " + body)))
+                            clientResponse -> clientResponse.bodyToMono(String.class)
+                                    .map(body -> {
+                                        log.error("Milvus upsert failed with status {}: {}",
+                                                clientResponse.statusCode(), body);
+                                        return new RuntimeException("Milvus service error upserting vectors: " +
+                                                clientResponse.statusCode() + " - " + body);
+                                    }))
                     .bodyToMono(String.class)
+                    .doOnError(error -> log.error("Milvus upsert error: {} - {}",
+                            error.getClass().getSimpleName(), error.getMessage()))
                     .block();
 
-            log.debug("Successfully upserted {} vectors", vectors.size());
+            log.info("Successfully upserted {} vectors, response: {}", vectors.size(), response);
         } catch (Exception e) {
-            log.error("Failed to upsert vectors to Milvus: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to upsert vectors to Milvus: " + e.getMessage(), e);
+            String errorType = e.getClass().getSimpleName();
+            String errorMsg = e.getMessage();
+
+            // Check for timeout-related errors
+            if (errorMsg != null && (errorMsg.contains("timeout") || errorMsg.contains("Timeout"))) {
+                log.error("Milvus upsert TIMEOUT: {} - {}", errorType, errorMsg);
+            } else if (e.getCause() != null && e.getCause().getMessage() != null &&
+                       e.getCause().getMessage().contains("timeout")) {
+                log.error("Milvus upsert TIMEOUT (from cause): {}", e.getCause().getMessage());
+            }
+
+            log.error("Failed to upsert vectors to Milvus: {} - {}", errorType, errorMsg, e);
+            throw new RuntimeException("Failed to upsert vectors to Milvus: " + errorMsg, e);
         }
     }
 
