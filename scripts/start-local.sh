@@ -114,7 +114,7 @@ echo ""
 echo "⏳ Waiting for services to be ready..."
 echo "This may take 1-2 minutes..."
 
-MAX_WAIT=180  # 3 minutes
+MAX_WAIT=600  # 10 minutes
 ELAPSED=0
 
 while [ $ELAPSED -lt $MAX_WAIT ]; do
