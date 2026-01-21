@@ -40,7 +40,7 @@ Open these URLs in your browser:
 
 | Service | URL | Credentials | What You See |
 |---------|-----|-------------|--------------|
-| **Grafana** | http://localhost:3000 | admin / admin | Beautiful dashboards with 8 panels |
+| **Grafana** | http://localhost:3030 | admin / admin | Beautiful dashboards with 8 panels |
 | **Prometheus** | http://localhost:9090 | - | Metrics explorer and query interface |
 | **Monitoring API** | http://localhost:8085/api/monitoring/health | - | JSON health status of all services |
 
@@ -48,7 +48,7 @@ Open these URLs in your browser:
 
 | Service | Health Check | Purpose |
 |---------|--------------|---------|
-| **Orchestrator** | http://localhost:8080/actuator/health | Main coordinator |
+| **Orchestrator** | http://localhost:8086/actuator/health | Main coordinator |
 | **GitHub** | http://localhost:8081/actuator/health | GitHub API |
 | **Document Processor** | http://localhost:8082/actuator/health | Document chunking |
 | **Embedding** | http://localhost:8083/actuator/health | AI embeddings |
@@ -137,10 +137,10 @@ Test the complete workflow:
 
 ```bash
 # Trigger repository sync
-curl -X POST http://localhost:8080/api/orchestrator/sync
+curl -X POST http://localhost:8086/api/orchestrator/sync
 
 # Check orchestrator health
-curl http://localhost:8080/actuator/health
+curl http://localhost:8086/actuator/health
 ```
 
 This will:
