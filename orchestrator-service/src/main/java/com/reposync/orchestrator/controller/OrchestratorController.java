@@ -19,6 +19,13 @@ public class OrchestratorController {
     public ResponseEntity<SyncJobResult> triggerSync() {
         log.info("Manual sync triggered via API");
         SyncJobResult result = workflowOrchestrator.executeSyncWorkflow();
+
+        // Return HTTP 500 if sync failed to make it clear in CI/CD
+        if ("FAILED".equals(result.getStatus())) {
+            log.error("Sync workflow failed: {}", result.getErrorMessage());
+            return ResponseEntity.internalServerError().body(result);
+        }
+
         return ResponseEntity.ok(result);
     }
 
