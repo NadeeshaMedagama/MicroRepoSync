@@ -245,7 +245,7 @@ public class WorkflowOrchestrator {
 
     private List<TextChunk> chunkDocuments(List<DocumentContent> documents) {
         try {
-            log.debug("Sending {} documents to processor service for chunking", documents.size());
+            log.info("Sending {} documents to processor service for chunking", documents.size());
 
             List<TextChunk> chunks = processorWebClient.post()
                     .uri("/api/processor/chunk/batch")
@@ -257,16 +257,18 @@ public class WorkflowOrchestrator {
                     .bodyToMono(new ParameterizedTypeReference<List<TextChunk>>() {})
                     .block();
 
+            log.info("Processor service returned {} chunks", chunks != null ? chunks.size() : 0);
             return chunks != null ? chunks : new ArrayList<>();
         } catch (Exception e) {
             log.error("Failed to chunk documents via processor service: {}", e.getMessage(), e);
+            System.err.println("CHUNKING FAILED: " + e.getMessage());
             throw new RuntimeException("Failed to chunk documents: " + e.getMessage(), e);
         }
     }
 
     private List<EmbeddingVector> generateEmbeddings(List<TextChunk> chunks) {
         try {
-            log.debug("Sending {} chunks to embedding service", chunks.size());
+            log.info("Sending {} chunks to embedding service for embedding generation", chunks.size());
 
             List<EmbeddingVector> vectors = embeddingWebClient.post()
                     .uri("/api/embedding/generate/batch")
@@ -278,9 +280,11 @@ public class WorkflowOrchestrator {
                     .bodyToMono(new ParameterizedTypeReference<List<EmbeddingVector>>() {})
                     .block();
 
+            log.info("Embedding service returned {} vectors", vectors != null ? vectors.size() : 0);
             return vectors != null ? vectors : new ArrayList<>();
         } catch (Exception e) {
             log.error("Failed to generate embeddings via embedding service: {}", e.getMessage(), e);
+            System.err.println("EMBEDDING GENERATION FAILED: " + e.getMessage());
             throw new RuntimeException("Failed to generate embeddings: " + e.getMessage(), e);
         }
     }
