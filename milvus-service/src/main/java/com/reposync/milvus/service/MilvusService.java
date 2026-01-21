@@ -198,6 +198,15 @@ public class MilvusService {
             log.info("Upserting {} valid vectors (filtered from {} total) to collection {}",
                     validVectors.size(), vectors.size(), collectionName);
 
+            // Log sample vector info for debugging
+            if (!validVectors.isEmpty()) {
+                EmbeddingVector sample = validVectors.get(0);
+                log.info("Sample vector - ID: {}, Vector dimension: {}, Metadata keys: {}",
+                        sample.getId(),
+                        sample.getVector() != null ? sample.getVector().size() : 0,
+                        sample.getMetadata() != null ? sample.getMetadata().keySet() : "null");
+            }
+
             // Ensure collection exists
             if (!hasCollection(collectionName)) {
                 int dimension = validVectors.get(0).getVector().size();
@@ -223,12 +232,18 @@ public class MilvusService {
             fields.add(new InsertParam.Field(VECTOR_FIELD, vectorList));
             fields.add(new InsertParam.Field(METADATA_FIELD, jsonMetadata));
 
+            log.info("Prepared insert params - IDs count: {}, Vectors count: {}, Metadata count: {}",
+                    ids.size(), vectorList.size(), jsonMetadata.size());
+
             InsertParam insertParam = InsertParam.newBuilder()
                     .withCollectionName(collectionName)
                     .withFields(fields)
                     .build();
 
+            log.info("Calling Milvus insert for collection: {}", collectionName);
             R<io.milvus.grpc.MutationResult> response = milvusClient.insert(insertParam);
+            log.info("Milvus insert response received - Status: {}, Message: {}",
+                    response.getStatus(), response.getMessage());
 
             if (response.getStatus() != R.Status.Success.getCode()) {
                 String errorMsg = String.format("Failed to insert vectors: %s (Status: %d, Exception: %s)",
