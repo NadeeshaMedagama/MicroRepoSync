@@ -202,16 +202,17 @@ jobs:
       - name: Trigger Sync Job
         id: sync
         run: |
+          # Trap errors and ensure we show logs
+          trap 'echo "Error occurred, showing logs..."; docker compose logs --tail=100 orchestrator-service; docker compose logs --tail=50 milvus-service; docker compose logs --tail=50 embedding-service' ERR
+          
           echo "🚀 Triggering repository sync job..."
           echo "Note: This API call blocks until sync completes (may take several minutes)"
+          echo ""
           
-          # Follow container logs in background so we see real-time output
-          echo "Starting background log monitoring..."
-          docker compose logs -f orchestrator-service &
-          LOG_PID=$!
-          
-          # Give a moment for logs to start
-          sleep 2
+          # Show service status before sync
+          echo "📊 Service status before sync:"
+          docker compose ps
+          echo ""
           
           # The /api/orchestrator/sync endpoint is synchronous - it returns only when complete
           # Use a longer timeout (10 minutes) to allow the sync to complete
@@ -221,11 +222,6 @@ jobs:
             --max-time 600 \
             -o sync-result.json 2>curl-error.txt)
           CURL_EXIT=$?
-          set -e
-          
-          # Stop the background log following
-          kill $LOG_PID 2>/dev/null || true
-          sleep 1
           
           echo ""
           echo "════════════════════════════════════════════════════════════"
@@ -233,22 +229,23 @@ jobs:
           echo "════════════════════════════════════════════════════════════"
           echo "Curl exit code: $CURL_EXIT"
           echo "HTTP Response Code: $HTTP_CODE"
+          echo ""
+          echo "Response body:"
+          cat sync-result.json 2>/dev/null || echo "No response body"
+          echo ""
+          
+          # Always show orchestrator logs immediately after sync completes
+          echo "════════════════════════════════════════════════════════════"
+          echo "                 ORCHESTRATOR SERVICE LOGS"
+          echo "════════════════════════════════════════════════════════════"
+          docker compose logs --tail=200 orchestrator-service
+          echo ""
           
           # Check if curl itself failed (e.g., connection refused, timeout)
           if [ $CURL_EXIT -ne 0 ]; then
             echo "❌ Curl command failed with exit code $CURL_EXIT"
             echo "Curl error output:"
             cat curl-error.txt || echo "No curl error"
-            echo ""
-            echo "Response body (if any):"
-            cat sync-result.json 2>/dev/null || echo "No response body"
-            
-            # Show ALL service logs immediately on curl failure
-            echo ""
-            echo "════════════════════════════════════════════════════════════"
-            echo "                 ORCHESTRATOR SERVICE LOGS"
-            echo "════════════════════════════════════════════════════════════"
-            docker compose logs --tail=300 orchestrator-service
             echo ""
             echo "════════════════════════════════════════════════════════════"
             echo "                    MILVUS SERVICE LOGS"
@@ -271,30 +268,18 @@ jobs:
           
           if [ "$HTTP_CODE" == "500" ]; then
             echo "❌ Error: Sync API returned HTTP 500 (sync failed)"
-            echo ""
-            echo "Response body (contains error details):"
-            cat sync-result.json | jq . 2>/dev/null || cat sync-result.json || echo "No response body"
             SYNC_FAILED=true
           elif [ "$HTTP_CODE" != "200" ]; then
             echo "❌ Error: Sync API returned HTTP $HTTP_CODE"
-            echo ""
-            echo "Response body:"
-            cat sync-result.json || echo "No response body"
             SYNC_FAILED=true
           else
-            echo "✅ Sync API call completed with HTTP 200"
-            echo ""
-            echo "Sync result:"
-            cat sync-result.json | jq . || cat sync-result.json
-            echo ""
-            
             # Check the status in the response
-            SYNC_STATUS=$(cat sync-result.json | jq -r '.status // "UNKNOWN"')
+            SYNC_STATUS=$(cat sync-result.json | jq -r '.status // "UNKNOWN"' 2>/dev/null || echo "UNKNOWN")
             echo "Sync Status: $SYNC_STATUS"
             
             if [ "$SYNC_STATUS" == "FAILED" ]; then
               echo "❌ Sync completed with FAILED status"
-              ERROR_MSG=$(cat sync-result.json | jq -r '.errorMessage // "No error message"')
+              ERROR_MSG=$(cat sync-result.json | jq -r '.errorMessage // "No error message"' 2>/dev/null || echo "No error message")
               echo "Error: $ERROR_MSG"
               SYNC_FAILED=true
             elif [ "$SYNC_STATUS" == "SUCCESS" ]; then
@@ -304,20 +289,14 @@ jobs:
             fi
           fi
           
-          # Always show service logs for debugging - ORCHESTRATOR FIRST since it has the error details
-          echo ""
-          echo "════════════════════════════════════════════════════════════"
-          echo "                 ORCHESTRATOR SERVICE LOGS"
-          echo "════════════════════════════════════════════════════════════"
-          docker compose logs --tail=200 orchestrator-service
-          echo ""
-          echo "════════════════════════════════════════════════════════════"
-          echo "                    MILVUS SERVICE LOGS"
-          echo "════════════════════════════════════════════════════════════"
-          docker compose logs --tail=200 milvus-service
-          echo ""
-          
+          # Show additional service logs if sync failed
           if [ "$SYNC_FAILED" = true ]; then
+            echo ""
+            echo "════════════════════════════════════════════════════════════"
+            echo "                    MILVUS SERVICE LOGS"
+            echo "════════════════════════════════════════════════════════════"
+            docker compose logs --tail=200 milvus-service
+            echo ""
             echo "════════════════════════════════════════════════════════════"
             echo "                   EMBEDDING SERVICE LOGS"
             echo "════════════════════════════════════════════════════════════"
@@ -327,11 +306,6 @@ jobs:
             echo "              DOCUMENT PROCESSOR SERVICE LOGS"
             echo "════════════════════════════════════════════════════════════"
             docker compose logs --tail=100 document-processor-service
-            echo ""
-            echo "════════════════════════════════════════════════════════════"
-            echo "                    GITHUB SERVICE LOGS"
-            echo "════════════════════════════════════════════════════════════"
-            docker compose logs --tail=50 github-service
             exit 1
           fi
 
