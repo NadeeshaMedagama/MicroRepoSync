@@ -178,6 +178,10 @@ public class MilvusService {
         }
     }
 
+    private static final int UPSERT_BATCH_SIZE = 50;  // Process vectors in smaller batches
+    private static final int MAX_RETRIES = 3;
+    private static final long RETRY_DELAY_MS = 2000;
+
     public void upsertVectors(String collectionName, List<EmbeddingVector> vectors) {
         try {
             if (vectors == null || vectors.isEmpty()) {
@@ -207,59 +211,134 @@ public class MilvusService {
                         sample.getMetadata() != null ? sample.getMetadata().keySet() : "null");
             }
 
-            // Ensure collection exists
-            if (!hasCollection(collectionName)) {
-                int dimension = validVectors.get(0).getVector().size();
-                createCollection(collectionName, dimension);
+            // Ensure collection exists with retry
+            ensureCollectionExistsWithRetry(collectionName, validVectors.get(0).getVector().size());
+
+            // Process vectors in batches for better reliability
+            int totalBatches = (validVectors.size() + UPSERT_BATCH_SIZE - 1) / UPSERT_BATCH_SIZE;
+            int successCount = 0;
+
+            for (int i = 0; i < validVectors.size(); i += UPSERT_BATCH_SIZE) {
+                int endIndex = Math.min(i + UPSERT_BATCH_SIZE, validVectors.size());
+                List<EmbeddingVector> batch = validVectors.subList(i, endIndex);
+                int batchNum = (i / UPSERT_BATCH_SIZE) + 1;
+
+                log.info("Processing batch {}/{}: {} vectors", batchNum, totalBatches, batch.size());
+
+                boolean batchSuccess = upsertBatchWithRetry(collectionName, batch, batchNum, totalBatches);
+                if (batchSuccess) {
+                    successCount += batch.size();
+                }
+
+                // Small delay between batches to avoid overwhelming Zilliz Cloud
+                if (endIndex < validVectors.size()) {
+                    try {
+                        Thread.sleep(200);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
             }
 
-            // Prepare data for insertion
-            List<String> ids = validVectors.stream()
-                    .map(EmbeddingVector::getId)
-                    .collect(Collectors.toList());
-
-            List<List<Float>> vectorList = validVectors.stream()
-                    .map(EmbeddingVector::getVector)
-                    .collect(Collectors.toList());
-
-            // Convert metadata to JsonObject for Milvus JSON field type
-            List<JsonObject> jsonMetadata = validVectors.stream()
-                    .map(v -> mapToJsonObject(v.getMetadata()))
-                    .collect(Collectors.toList());
-
-            List<InsertParam.Field> fields = new ArrayList<>();
-            fields.add(new InsertParam.Field(ID_FIELD, ids));
-            fields.add(new InsertParam.Field(VECTOR_FIELD, vectorList));
-            fields.add(new InsertParam.Field(METADATA_FIELD, jsonMetadata));
-
-            log.info("Prepared insert params - IDs count: {}, Vectors count: {}, Metadata count: {}",
-                    ids.size(), vectorList.size(), jsonMetadata.size());
-
-            InsertParam insertParam = InsertParam.newBuilder()
-                    .withCollectionName(collectionName)
-                    .withFields(fields)
-                    .build();
-
-            log.info("Calling Milvus insert for collection: {}", collectionName);
-            R<io.milvus.grpc.MutationResult> response = milvusClient.insert(insertParam);
-            log.info("Milvus insert response received - Status: {}, Message: {}",
-                    response.getStatus(), response.getMessage());
-
-            if (response.getStatus() != R.Status.Success.getCode()) {
-                String errorMsg = String.format("Failed to insert vectors: %s (Status: %d, Exception: %s)",
-                        response.getMessage(),
-                        response.getStatus(),
-                        response.getException() != null ? response.getException().getMessage() : "none");
-                log.error(errorMsg);
-                throw new RuntimeException(errorMsg);
-            }
-
-            log.info("Successfully upserted {} vectors to collection {}", validVectors.size(), collectionName);
+            log.info("Successfully upserted {}/{} vectors to collection {}",
+                    successCount, validVectors.size(), collectionName);
 
         } catch (Exception e) {
             log.error("Error upserting vectors to {}: {}", collectionName, e.getMessage(), e);
             throw new RuntimeException("Failed to upsert vectors: " + e.getMessage(), e);
         }
+    }
+
+    private void ensureCollectionExistsWithRetry(String collectionName, int dimension) {
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                if (!hasCollection(collectionName)) {
+                    createCollection(collectionName, dimension);
+                }
+                return;
+            } catch (Exception e) {
+                log.warn("Attempt {}/{} to ensure collection exists failed: {}",
+                        attempt, MAX_RETRIES, e.getMessage());
+                if (attempt < MAX_RETRIES) {
+                    try {
+                        Thread.sleep(RETRY_DELAY_MS * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                } else {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    private boolean upsertBatchWithRetry(String collectionName, List<EmbeddingVector> batch,
+                                          int batchNum, int totalBatches) {
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                // Prepare data for insertion
+                List<String> ids = batch.stream()
+                        .map(EmbeddingVector::getId)
+                        .collect(Collectors.toList());
+
+                List<List<Float>> vectorList = batch.stream()
+                        .map(EmbeddingVector::getVector)
+                        .collect(Collectors.toList());
+
+                // Convert metadata to JsonObject for Milvus JSON field type
+                List<JsonObject> jsonMetadata = batch.stream()
+                        .map(v -> mapToJsonObject(v.getMetadata()))
+                        .collect(Collectors.toList());
+
+                List<InsertParam.Field> fields = new ArrayList<>();
+                fields.add(new InsertParam.Field(ID_FIELD, ids));
+                fields.add(new InsertParam.Field(VECTOR_FIELD, vectorList));
+                fields.add(new InsertParam.Field(METADATA_FIELD, jsonMetadata));
+
+                InsertParam insertParam = InsertParam.newBuilder()
+                        .withCollectionName(collectionName)
+                        .withFields(fields)
+                        .build();
+
+                log.debug("Calling Milvus insert for batch {}/{}, attempt {}", batchNum, totalBatches, attempt);
+                R<io.milvus.grpc.MutationResult> response = milvusClient.insert(insertParam);
+
+                if (response.getStatus() == R.Status.Success.getCode()) {
+                    log.info("✅ Batch {}/{} inserted successfully ({} vectors)",
+                            batchNum, totalBatches, batch.size());
+                    return true;
+                } else {
+                    String errorMsg = String.format("Batch %d/%d insert failed: %s (Status: %d)",
+                            batchNum, totalBatches, response.getMessage(), response.getStatus());
+                    log.warn("Attempt {}/{}: {}", attempt, MAX_RETRIES, errorMsg);
+                    lastException = new RuntimeException(errorMsg);
+                }
+            } catch (Exception e) {
+                log.warn("Attempt {}/{} for batch {}/{} failed: {}",
+                        attempt, MAX_RETRIES, batchNum, totalBatches, e.getMessage());
+                lastException = e;
+            }
+
+            // Wait before retry
+            if (attempt < MAX_RETRIES) {
+                try {
+                    long waitTime = RETRY_DELAY_MS * attempt;
+                    log.debug("Waiting {}ms before retry...", waitTime);
+                    Thread.sleep(waitTime);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+
+        // Log final failure but don't throw - continue with other batches
+        log.error("❌ Batch {}/{} failed after {} attempts: {}",
+                batchNum, totalBatches, MAX_RETRIES,
+                lastException != null ? lastException.getMessage() : "Unknown error");
+        return false;
     }
 
     public boolean hasCollection(String collectionName) {
