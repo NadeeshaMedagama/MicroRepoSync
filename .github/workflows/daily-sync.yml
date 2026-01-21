@@ -8,6 +8,7 @@ jobs:
   sync:
     name: Execute RepoSync with Docker Compose
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -254,192 +255,93 @@ jobs:
           docker compose logs --tail=30 milvus-service
           echo ""
           
-          # Start a background health monitor to detect container crashes
-          (
-            while true; do
-              sleep 30
-              UNHEALTHY=$(docker compose ps --format json 2>/dev/null | jq -r 'select(.State != "running") | .Name' 2>/dev/null || echo "")
-              if [ -n "$UNHEALTHY" ]; then
-                echo "⚠️ [MONITOR] Unhealthy containers detected: $UNHEALTHY"
-                docker compose ps
-              fi
-            done
-          ) &
-          MONITOR_PID=$!
-          
           # The /api/orchestrator/sync endpoint is synchronous - it returns only when complete
-          # Use a longer timeout (20 minutes) to allow the sync to complete with retries
           echo "📡 Starting sync (timeout: 20 minutes)..."
           echo ""
           
-          set +e  # Don't exit on error
+          # Make the API call
+          set +e
           HTTP_CODE=$(curl -s -w "%{http_code}" -X POST http://localhost:8086/api/orchestrator/sync \
             -H "Content-Type: application/json" \
             --max-time 1200 \
             --connect-timeout 30 \
-            --retry 2 \
-            --retry-delay 5 \
             -o sync-result.json 2>curl-error.txt)
           CURL_EXIT=$?
-          
-          # Stop the background monitor
-          kill $MONITOR_PID 2>/dev/null || true
+          set -e
           
           echo ""
           echo "════════════════════════════════════════════════════════════"
-          echo "                     SYNC RESULT SUMMARY"
+          echo "                     SYNC RESULT SUMMARY"  
           echo "════════════════════════════════════════════════════════════"
           echo "Curl exit code: $CURL_EXIT"
           echo "HTTP Response Code: $HTTP_CODE"
-          echo ""
-          
-          # Show container status immediately after sync
-          echo "📊 Container status after sync:"
-          docker compose ps
           echo ""
           
           echo "Response body:"
           cat sync-result.json 2>/dev/null || echo "No response body"
           echo ""
           
-          # Always show orchestrator logs immediately after sync completes
+          # ALWAYS show orchestrator logs - this is critical for debugging
+          echo ""
           echo "════════════════════════════════════════════════════════════"
-          echo "                 ORCHESTRATOR SERVICE LOGS"
+          echo "           ORCHESTRATOR SERVICE LOGS (ALWAYS SHOWN)"
           echo "════════════════════════════════════════════════════════════"
-          docker compose logs --tail=200 orchestrator-service
+          docker compose logs --tail=300 orchestrator-service 2>&1 || echo "Failed to get orchestrator logs"
           echo ""
           
-          # Check if curl itself failed (e.g., connection refused, timeout)
-          if [ $CURL_EXIT -ne 0 ]; then
+          echo "════════════════════════════════════════════════════════════"
+          echo "              MILVUS SERVICE LOGS (ALWAYS SHOWN)"
+          echo "════════════════════════════════════════════════════════════"
+          docker compose logs --tail=150 milvus-service 2>&1 || echo "Failed to get milvus logs"
+          echo ""
+          
+          # Now check for errors
+          if [ "$CURL_EXIT" -ne 0 ]; then
             echo "❌ Curl command failed with exit code $CURL_EXIT"
-            echo "Curl error output:"
-            cat curl-error.txt || echo "No curl error"
-            echo ""
-            echo "════════════════════════════════════════════════════════════"
-            echo "                    MILVUS SERVICE LOGS"
-            echo "════════════════════════════════════════════════════════════"
-            docker compose logs --tail=200 milvus-service
-            echo ""
-            echo "════════════════════════════════════════════════════════════"
-            echo "                   EMBEDDING SERVICE LOGS"
-            echo "════════════════════════════════════════════════════════════"
-            docker compose logs --tail=100 embedding-service
-            echo ""
-            echo "════════════════════════════════════════════════════════════"
-            echo "              DOCUMENT PROCESSOR SERVICE LOGS"
-            echo "════════════════════════════════════════════════════════════"
-            docker compose logs --tail=100 document-processor-service
+            cat curl-error.txt 2>/dev/null || true
             exit 1
           fi
           
-          SYNC_FAILED=false
-          
-          if [ "$HTTP_CODE" == "500" ]; then
-            echo "❌ Error: Sync API returned HTTP 500 (sync failed)"
-            SYNC_FAILED=true
-          elif [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ Error: Sync API returned HTTP $HTTP_CODE"
-            SYNC_FAILED=true
-          else
-            # Check the status in the response
-            SYNC_STATUS=$(cat sync-result.json | jq -r '.status // "UNKNOWN"' 2>/dev/null || echo "UNKNOWN")
-            echo "Sync Status: $SYNC_STATUS"
-            
-            if [ "$SYNC_STATUS" == "FAILED" ]; then
-              echo "❌ Sync completed with FAILED status"
-              ERROR_MSG=$(cat sync-result.json | jq -r '.errorMessage // "No error message"' 2>/dev/null || echo "No error message")
-              echo "Error: $ERROR_MSG"
-              SYNC_FAILED=true
-            elif [ "$SYNC_STATUS" == "SUCCESS" ]; then
-              echo "✅ Sync completed successfully!"
-            else
-              echo "⚠️ Unexpected sync status: $SYNC_STATUS"
-            fi
-          fi
-          
-          # Show additional service logs if sync failed
-          if [ "$SYNC_FAILED" = true ]; then
-            echo ""
-            echo "════════════════════════════════════════════════════════════"
-            echo "                    MILVUS SERVICE LOGS"
-            echo "════════════════════════════════════════════════════════════"
-            docker compose logs --tail=200 milvus-service
-            echo ""
-            echo "════════════════════════════════════════════════════════════"
-            echo "                   EMBEDDING SERVICE LOGS"
-            echo "════════════════════════════════════════════════════════════"
-            docker compose logs --tail=100 embedding-service
-            echo ""
-            echo "════════════════════════════════════════════════════════════"
-            echo "              DOCUMENT PROCESSOR SERVICE LOGS"
-            echo "════════════════════════════════════════════════════════════"
-            docker compose logs --tail=100 document-processor-service
+          if [ "$HTTP_CODE" = "500" ] || [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Sync API returned HTTP $HTTP_CODE"
             exit 1
           fi
+          
+          # Check response status
+          SYNC_STATUS=$(cat sync-result.json | jq -r '.status // "UNKNOWN"' 2>/dev/null || echo "UNKNOWN")
+          echo "Sync Status: $SYNC_STATUS"
+          
+          if [ "$SYNC_STATUS" = "FAILED" ]; then
+            echo "❌ Sync completed with FAILED status"
+            ERROR_MSG=$(cat sync-result.json | jq -r '.errorMessage // "No error message"' 2>/dev/null || echo "Unknown error")
+            echo "Error: $ERROR_MSG"
+            exit 1
+          fi
+          
+          echo "✅ Sync completed successfully!"
 
       - name: Check Sync Status
         run: |
           echo "🔍 Verifying sync completion..."
           echo ""
           
-          # Check the sync result from the previous step
           if [ -f sync-result.json ]; then
-            SYNC_STATUS=$(cat sync-result.json | jq -r '.status // "UNKNOWN"')
+            echo "📊 Sync Statistics:"
+            cat sync-result.json | jq . 2>/dev/null || cat sync-result.json
+            echo ""
             
-            if [ "$SYNC_STATUS" == "SUCCESS" ]; then
-              echo "✅ SUCCESS: Sync workflow completed successfully!"
-              echo ""
-              
-              # Extract statistics from the response
-              echo "📊 Sync Statistics:"
-              echo "  Repositories Processed: $(cat sync-result.json | jq -r '.repositoriesProcessed // 0')"
-              echo "  Documents Processed: $(cat sync-result.json | jq -r '.documentsProcessed // 0')"
-              echo "  Chunks Created: $(cat sync-result.json | jq -r '.chunksCreated // 0')"
-              echo "  Vectors Stored: $(cat sync-result.json | jq -r '.vectorsStored // 0')"
-              echo ""
-              
-              echo "=== Final Orchestrator Logs (last 80 lines) ==="
-              docker compose logs --tail=80 orchestrator-service
-              echo ""
-              
+            SYNC_STATUS=$(cat sync-result.json | jq -r '.status // "UNKNOWN"' 2>/dev/null)
+            if [ "$SYNC_STATUS" = "SUCCESS" ]; then
+              echo "✅ SUCCESS: Sync workflow completed!"
+              echo "  Repositories: $(cat sync-result.json | jq -r '.repositoriesProcessed // 0')"
+              echo "  Documents: $(cat sync-result.json | jq -r '.documentsProcessed // 0')"
+              echo "  Chunks: $(cat sync-result.json | jq -r '.chunksCreated // 0')"
+              echo "  Vectors: $(cat sync-result.json | jq -r '.vectorsStored // 0')"
               exit 0
-            else
-              echo "❌ FAILURE: Sync workflow did not complete successfully"
-              echo "Status: $SYNC_STATUS"
-              ERROR_MSG=$(cat sync-result.json | jq -r '.errorMessage // "No error message"')
-              echo "Error: $ERROR_MSG"
             fi
-          else
-            echo "❌ FAILURE: sync-result.json not found"
           fi
           
-          echo ""
-          echo "═══════════════════════════════════════════════════════════"
-          echo "                    🔍 DEBUG INFORMATION"
-          echo "═══════════════════════════════════════════════════════════"
-          echo ""
-          
-          echo "--- 🔴 ORCHESTRATOR SERVICE FULL LOGS (Last 300 lines) ---"
-          docker compose logs --tail=300 orchestrator-service
-          echo ""
-          
-          echo "--- 🔵 MILVUS SERVICE LOGS (Last 100 lines) ---"
-          docker compose logs --tail=100 milvus-service
-          echo ""
-          
-          echo "--- 🟢 EMBEDDING SERVICE LOGS (Last 80 lines) ---"
-          docker compose logs --tail=80 embedding-service
-          echo ""
-          
-          echo "--- 🟡 GITHUB SERVICE LOGS (Last 50 lines) ---"
-          docker compose logs --tail=50 github-service
-          echo ""
-          
-          echo "--- 🔍 ERROR ANALYSIS ---"
-          echo "Looking for errors in orchestrator logs:"
-          docker compose logs orchestrator-service | grep -i -E "(error|exception|failed|timeout)" | tail -30 || echo "   No errors found"
-          echo ""
-          
+          echo "❌ Sync did not complete successfully"
           exit 1
 
       - name: Save Docker Logs
