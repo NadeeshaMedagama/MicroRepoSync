@@ -199,12 +199,51 @@ jobs:
           docker compose logs --tail=100 orchestrator-service
           exit 1
 
+      - name: Verify Milvus Connection
+        run: |
+          echo "🔍 Verifying Milvus service connection to Zilliz Cloud..."
+          echo ""
+          
+          # Test Milvus service health
+          MILVUS_HEALTH=$(curl -sf http://localhost:8084/actuator/health 2>/dev/null || echo "FAILED")
+          echo "Milvus Service Health: $MILVUS_HEALTH"
+          
+          # Test collection check endpoint (this triggers actual Zilliz connection)
+          echo ""
+          echo "Testing Milvus-Zilliz connection..."
+          COLLECTION_CHECK=$(curl -sf http://localhost:8084/api/milvus/collection/test_connection/exists 2>&1 || echo "FAILED")
+          echo "Collection check response: $COLLECTION_CHECK"
+          
+          # Show Milvus service logs for connection verification
+          echo ""
+          echo "=== Milvus Service Startup Logs ==="
+          docker compose logs --tail=50 milvus-service
+          echo ""
+
+      - name: Run Preflight Check
+        run: |
+          echo "🔍 Running preflight connectivity check..."
+          echo ""
+          
+          # Call the preflight endpoint to verify all services can communicate
+          PREFLIGHT_RESULT=$(curl -sf http://localhost:8086/api/orchestrator/preflight 2>&1 || echo '{"overall":"FAILED","error":"curl failed"}')
+          echo "Preflight check result:"
+          echo "$PREFLIGHT_RESULT" | jq . 2>/dev/null || echo "$PREFLIGHT_RESULT"
+          echo ""
+          
+          # Check if overall status is READY
+          OVERALL_STATUS=$(echo "$PREFLIGHT_RESULT" | jq -r '.overall // "FAILED"' 2>/dev/null || echo "FAILED")
+          if [ "$OVERALL_STATUS" != "READY" ]; then
+            echo "⚠️ Preflight check not fully ready: $OVERALL_STATUS"
+            echo "Continuing anyway - individual service checks above show status..."
+          else
+            echo "✅ All services are ready for sync!"
+          fi
+          echo ""
+
       - name: Trigger Sync Job
         id: sync
         run: |
-          # Trap errors and ensure we show logs
-          trap 'echo "Error occurred, showing logs..."; docker compose logs --tail=100 orchestrator-service; docker compose logs --tail=50 milvus-service; docker compose logs --tail=50 embedding-service' ERR
-          
           echo "🚀 Triggering repository sync job..."
           echo "Note: This API call blocks until sync completes (may take several minutes)"
           echo ""
@@ -214,12 +253,23 @@ jobs:
           docker compose ps
           echo ""
           
+          # Show Milvus service logs before sync to verify connection
+          echo "📋 Milvus Service startup logs:"
+          docker compose logs --tail=30 milvus-service
+          echo ""
+          
           # The /api/orchestrator/sync endpoint is synchronous - it returns only when complete
-          # Use a longer timeout (10 minutes) to allow the sync to complete
+          # Use a longer timeout (20 minutes) to allow the sync to complete with retries
+          echo "📡 Starting sync (timeout: 20 minutes)..."
+          echo ""
+          
           set +e  # Don't exit on error
           HTTP_CODE=$(curl -s -w "%{http_code}" -X POST http://localhost:8086/api/orchestrator/sync \
             -H "Content-Type: application/json" \
-            --max-time 600 \
+            --max-time 1200 \
+            --connect-timeout 30 \
+            --retry 2 \
+            --retry-delay 5 \
             -o sync-result.json 2>curl-error.txt)
           CURL_EXIT=$?
           
