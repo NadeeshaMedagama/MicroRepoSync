@@ -118,7 +118,7 @@ MAX_WAIT=600  # 10 minutes
 ELAPSED=0
 
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-    if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+    if curl -sf http://localhost:8086/actuator/health > /dev/null 2>&1; then
         echo -e "${GREEN}✅ Orchestrator Service is healthy!${NC}"
         break
     fi
