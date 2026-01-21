@@ -14,7 +14,7 @@ docker-compose up -d monitoring-service prometheus grafana
 ### Access Interfaces
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Grafana | http://localhost:3000 | admin/admin |
+| Grafana | http://localhost:3030 | admin/admin |
 | Prometheus | http://localhost:9090 | - |
 | Monitoring API | http://localhost:8085/api/monitoring | - |
 
@@ -49,7 +49,7 @@ curl http://localhost:8085/api/monitoring/services/unhealthy
 ## 📈 Grafana Dashboards
 
 ### Import Dashboard
-1. Navigate to http://localhost:3000
+1. Navigate to http://localhost:3030
 2. Login with admin/admin
 3. Click "+" → "Import"
 4. Upload `monitoring/grafana/dashboards/reposync-overview.json`
