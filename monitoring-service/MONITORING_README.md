@@ -20,7 +20,7 @@ docker-compose up -d monitoring-service prometheus grafana
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| **Grafana** | http://localhost:3000 | admin/admin |
+| **Grafana** | http://localhost:3030 | admin/admin |
 | **Prometheus** | http://localhost:9090 | - |
 | **Monitoring API** | http://localhost:8085/api/monitoring | - |
 
@@ -156,7 +156,7 @@ docker ps | grep -E "monitoring|prometheus|grafana"
 # Test endpoints
 curl http://localhost:8085/actuator/health
 curl http://localhost:9090/-/healthy
-curl http://localhost:3000/api/health
+curl http://localhost:3030/api/health
 ```
 
 ## 🛠️ Troubleshooting
