@@ -30,6 +30,9 @@ COPY --from=build /app/orchestrator-service/target/*.jar app.jar
 # Expose port
 EXPOSE 8086
 
+# Set server port explicitly
+ENV SERVER_PORT=8086
+
 # Run the application
 ENTRYPOINT ["java", "-jar", "app.jar"]
 
