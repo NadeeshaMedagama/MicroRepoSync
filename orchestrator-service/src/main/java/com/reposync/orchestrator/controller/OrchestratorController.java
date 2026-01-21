@@ -2,7 +2,6 @@ package com.reposync.orchestrator.controller;
 
 import com.reposync.common.dto.SyncJobResult;
 import com.reposync.orchestrator.service.WorkflowOrchestrator;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -134,4 +133,3 @@ public class OrchestratorController {
         return ResponseEntity.ok("Orchestrator Service is running");
     }
 }
-
