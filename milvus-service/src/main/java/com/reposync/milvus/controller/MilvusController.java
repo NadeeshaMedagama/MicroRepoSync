@@ -34,12 +34,24 @@ public class MilvusController {
     @PostMapping("/vectors/upsert")
     public ResponseEntity<String> upsertVectors(@RequestParam String collectionName,
                                                  @RequestBody List<EmbeddingVector> vectors) {
-        log.info("Upserting {} vectors to collection: {}", vectors.size(), collectionName);
+        log.info("Received upsert request: {} vectors to collection: {}", vectors.size(), collectionName);
+        long startTime = System.currentTimeMillis();
         try {
+            // Log sample vector info
+            if (!vectors.isEmpty()) {
+                EmbeddingVector first = vectors.get(0);
+                log.debug("First vector: id={}, dimension={}",
+                        first.getId(),
+                        first.getVector() != null ? first.getVector().size() : 0);
+            }
+
             milvusService.upsertVectors(collectionName, vectors);
-            return ResponseEntity.ok("Vectors upserted successfully");
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Successfully upserted {} vectors to {} in {}ms", vectors.size(), collectionName, duration);
+            return ResponseEntity.ok("Vectors upserted successfully (" + vectors.size() + " vectors in " + duration + "ms)");
         } catch (Exception e) {
-            log.error("Failed to upsert vectors to {}: {}", collectionName, e.getMessage(), e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Failed to upsert vectors to {} after {}ms: {}", collectionName, duration, e.getMessage(), e);
             return ResponseEntity.internalServerError()
                     .body("Failed to upsert vectors: " + e.getMessage());
         }
