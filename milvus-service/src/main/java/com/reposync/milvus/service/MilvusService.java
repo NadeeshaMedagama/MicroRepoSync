@@ -127,61 +127,120 @@ public class MilvusService {
     }
 
     private void createIndex(String collectionName, int dimension) {
-        try {
-            log.info("Creating index for collection {} on field {}", collectionName, VECTOR_FIELD);
+        log.info("Creating index for collection {} on field {}", collectionName, VECTOR_FIELD);
 
-            // Use AUTOINDEX for Zilliz Cloud compatibility
-            // For self-hosted Milvus, this will create an appropriate index automatically
-            io.milvus.param.index.CreateIndexParam indexParam = io.milvus.param.index.CreateIndexParam.newBuilder()
-                    .withCollectionName(collectionName)
-                    .withFieldName(VECTOR_FIELD)
-                    .withIndexName("vector_idx")
-                    .withIndexType(io.milvus.param.IndexType.AUTOINDEX)
-                    .withMetricType(io.milvus.param.MetricType.COSINE)
-                    .build();
+        // Use AUTOINDEX for Zilliz Cloud compatibility
+        io.milvus.param.index.CreateIndexParam indexParam = io.milvus.param.index.CreateIndexParam.newBuilder()
+                .withCollectionName(collectionName)
+                .withFieldName(VECTOR_FIELD)
+                .withIndexName("vector_idx")
+                .withIndexType(io.milvus.param.IndexType.AUTOINDEX)
+                .withMetricType(io.milvus.param.MetricType.COSINE)
+                .withSyncMode(Boolean.TRUE)  // Wait for index to be ready
+                .withSyncWaitingTimeout(120L)  // Wait up to 2 minutes
+                .withSyncWaitingInterval(500L)  // Check every 500ms
+                .build();
 
-            R<RpcStatus> response = milvusClient.createIndex(indexParam);
+        int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                log.info("Creating index attempt {}/{}", attempt, maxRetries);
+                R<RpcStatus> response = milvusClient.createIndex(indexParam);
 
-            String responseMessage = getResponseMessage(response);
-            log.info("Milvus createIndex response - Status: {}, Message: {}",
-                    response.getStatus(), responseMessage);
+                String responseMessage = getResponseMessage(response);
+                log.info("Milvus createIndex response - Status: {}, Message: {}",
+                        response.getStatus(), responseMessage);
 
-            if (response.getStatus() != R.Status.Success.getCode()) {
-                // On Zilliz Cloud Serverless, index might be auto-created, so just log warning
-                log.warn("Index creation returned non-success status (may be auto-indexed): {}", responseMessage);
-            } else {
-                log.info("Index created successfully for collection {}", collectionName);
+                if (response.getStatus() == R.Status.Success.getCode()) {
+                    log.info("✅ Index created successfully for collection {}", collectionName);
+                    return;
+                } else if (responseMessage.contains("index already exist") ||
+                           responseMessage.contains("already exists")) {
+                    log.info("Index already exists for collection {}", collectionName);
+                    return;
+                } else {
+                    log.warn("Index creation returned non-success status: {} - {}",
+                            response.getStatus(), responseMessage);
+                }
+            } catch (Exception e) {
+                log.warn("Index creation attempt {}/{} failed: {}", attempt, maxRetries, e.getMessage());
+                if (e.getMessage() != null && e.getMessage().contains("already exist")) {
+                    log.info("Index already exists for collection {}", collectionName);
+                    return;
+                }
             }
-        } catch (Exception e) {
-            // Don't fail if index creation fails - Zilliz Cloud Serverless auto-indexes
-            log.warn("Index creation exception (may be auto-indexed on Zilliz Cloud): {}", e.getMessage());
+
+            if (attempt < maxRetries) {
+                try {
+                    Thread.sleep(2000 * attempt);  // Exponential backoff
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
         }
+
+        // On Zilliz Cloud Serverless, index might still be created automatically
+        // Log a warning but don't fail - the load operation will fail if index is truly missing
+        log.warn("Index creation may have failed for {} - will attempt to load anyway", collectionName);
     }
 
     private void loadCollection(String collectionName) {
-        try {
-            log.info("Loading collection {} into memory", collectionName);
+        log.info("Loading collection {} into memory", collectionName);
 
-            LoadCollectionParam loadParam = LoadCollectionParam.newBuilder()
-                    .withCollectionName(collectionName)
-                    .build();
+        LoadCollectionParam loadParam = LoadCollectionParam.newBuilder()
+                .withCollectionName(collectionName)
+                .withSyncLoad(Boolean.TRUE)  // Wait for load to complete
+                .withSyncLoadWaitingTimeout(120L)  // Wait up to 2 minutes
+                .withSyncLoadWaitingInterval(500L)  // Check every 500ms
+                .build();
 
-            R<RpcStatus> response = milvusClient.loadCollection(loadParam);
+        int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                log.info("Loading collection attempt {}/{}", attempt, maxRetries);
+                R<RpcStatus> response = milvusClient.loadCollection(loadParam);
 
-            String responseMessage = getResponseMessage(response);
-            log.info("Milvus loadCollection response - Status: {}, Message: {}",
-                    response.getStatus(), responseMessage);
+                String responseMessage = getResponseMessage(response);
+                log.info("Milvus loadCollection response - Status: {}, Message: {}",
+                        response.getStatus(), responseMessage);
 
-            if (response.getStatus() == R.Status.Success.getCode()) {
-                log.info("Collection {} loaded into memory", collectionName);
-            } else {
-                // On Zilliz Cloud Serverless, collections are auto-loaded
-                log.warn("Load collection returned non-success (may be auto-loaded): {}", responseMessage);
+                if (response.getStatus() == R.Status.Success.getCode()) {
+                    log.info("✅ Collection {} loaded into memory", collectionName);
+                    return;
+                } else if (responseMessage.contains("already loaded") ||
+                           responseMessage.contains("load state: Loaded")) {
+                    log.info("Collection {} is already loaded", collectionName);
+                    return;
+                } else if (responseMessage.contains("index not found")) {
+                    log.warn("Index not found, waiting for index to be ready...");
+                    // Wait and retry - index might still be building
+                } else {
+                    log.warn("Load collection returned non-success: {} - {}",
+                            response.getStatus(), responseMessage);
+                }
+            } catch (Exception e) {
+                log.warn("Load collection attempt {}/{} failed: {}", attempt, maxRetries, e.getMessage());
+                if (e.getMessage() != null && e.getMessage().contains("already loaded")) {
+                    log.info("Collection {} is already loaded", collectionName);
+                    return;
+                }
             }
-        } catch (Exception e) {
-            // Don't fail if load fails - Zilliz Cloud Serverless auto-loads
-            log.warn("Load collection exception (may be auto-loaded on Zilliz Cloud): {}", e.getMessage());
+
+            if (attempt < maxRetries) {
+                try {
+                    long waitTime = 5000L * attempt;  // Wait 5s, 10s, 15s
+                    log.info("Waiting {}ms before retry...", waitTime);
+                    Thread.sleep(waitTime);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
         }
+
+        // On Zilliz Cloud Serverless, collections might be auto-loaded on first query
+        log.warn("Load collection may have failed for {} - Zilliz Cloud may auto-load on first use", collectionName);
     }
 
     private static final int UPSERT_BATCH_SIZE = 50;  // Process vectors in smaller batches
