@@ -42,8 +42,9 @@ public class MilvusService {
                         listResponse.getStatus(),
                         listResponse.getData() != null ? listResponse.getData().getCollectionNamesCount() : 0);
                 if (listResponse.getStatus() != R.Status.Success.getCode()) {
-                    log.error("Milvus connection failed: {}", listResponse.getMessage());
-                    throw new RuntimeException("Cannot connect to Milvus: " + listResponse.getMessage());
+                    String errorMessage = getResponseMessage(listResponse);
+                    log.error("Milvus connection failed: {}", errorMessage);
+                    throw new RuntimeException("Cannot connect to Milvus: " + errorMessage);
                 }
             } catch (Exception connEx) {
                 log.error("Milvus connection test failed: {}", connEx.getMessage(), connEx);
@@ -90,17 +91,20 @@ public class MilvusService {
             log.debug("Sending createCollection request to Milvus...");
             R<RpcStatus> response = milvusClient.createCollection(createCollectionParam);
 
-            log.info("Milvus createCollection response - Status: {}, StatusCode: {}, Message: {}, Exception: {}",
+            // Safely get the message - the SDK's getMessage() can throw NPE when exception is null
+            String responseMessage = getResponseMessage(response);
+            String exceptionMessage = response.getException() != null ? response.getException().getMessage() : "none";
+
+            log.info("Milvus createCollection response - Status: {}, Message: {}, Exception: {}",
                     response.getStatus(),
-                    response.getStatus(),
-                    response.getMessage(),
-                    response.getException() != null ? response.getException().getMessage() : "none");
+                    responseMessage,
+                    exceptionMessage);
 
             if (response.getStatus() != R.Status.Success.getCode()) {
                 String errorMsg = String.format("Milvus createCollection failed with status %d: %s (Exception: %s)",
                         response.getStatus(),
-                        response.getMessage(),
-                        response.getException() != null ? response.getException().getMessage() : "none");
+                        responseMessage,
+                        exceptionMessage);
                 log.error(errorMsg);
                 if (response.getException() != null) {
                     log.error("Milvus exception details:", response.getException());
@@ -138,12 +142,13 @@ public class MilvusService {
 
             R<RpcStatus> response = milvusClient.createIndex(indexParam);
 
+            String responseMessage = getResponseMessage(response);
             log.info("Milvus createIndex response - Status: {}, Message: {}",
-                    response.getStatus(), response.getMessage());
+                    response.getStatus(), responseMessage);
 
             if (response.getStatus() != R.Status.Success.getCode()) {
                 // On Zilliz Cloud Serverless, index might be auto-created, so just log warning
-                log.warn("Index creation returned non-success status (may be auto-indexed): {}", response.getMessage());
+                log.warn("Index creation returned non-success status (may be auto-indexed): {}", responseMessage);
             } else {
                 log.info("Index created successfully for collection {}", collectionName);
             }
@@ -163,14 +168,15 @@ public class MilvusService {
 
             R<RpcStatus> response = milvusClient.loadCollection(loadParam);
 
+            String responseMessage = getResponseMessage(response);
             log.info("Milvus loadCollection response - Status: {}, Message: {}",
-                    response.getStatus(), response.getMessage());
+                    response.getStatus(), responseMessage);
 
             if (response.getStatus() == R.Status.Success.getCode()) {
                 log.info("Collection {} loaded into memory", collectionName);
             } else {
                 // On Zilliz Cloud Serverless, collections are auto-loaded
-                log.warn("Load collection returned non-success (may be auto-loaded): {}", response.getMessage());
+                log.warn("Load collection returned non-success (may be auto-loaded): {}", responseMessage);
             }
         } catch (Exception e) {
             // Don't fail if load fails - Zilliz Cloud Serverless auto-loads
@@ -310,8 +316,9 @@ public class MilvusService {
                             batchNum, totalBatches, batch.size());
                     return true;
                 } else {
+                    String responseMessage = getResponseMessage(response);
                     String errorMsg = String.format("Batch %d/%d insert failed: %s (Status: %d)",
-                            batchNum, totalBatches, response.getMessage(), response.getStatus());
+                            batchNum, totalBatches, responseMessage, response.getStatus());
                     log.warn("Attempt {}/{}: {}", attempt, MAX_RETRIES, errorMsg);
                     lastException = new RuntimeException(errorMsg);
                 }
@@ -350,12 +357,13 @@ public class MilvusService {
 
             R<Boolean> response = milvusClient.hasCollection(param);
 
+            String responseMessage = getResponseMessage(response);
             log.debug("hasCollection response - Status: {}, Data: {}, Message: {}",
-                    response.getStatus(), response.getData(), response.getMessage());
+                    response.getStatus(), response.getData(), responseMessage);
 
             if (response.getStatus() != R.Status.Success.getCode()) {
                 log.warn("hasCollection check failed with status {}: {}",
-                        response.getStatus(), response.getMessage());
+                        response.getStatus(), responseMessage);
                 return false;
             }
 
@@ -427,6 +435,27 @@ public class MilvusService {
                    .replace("\n", "\\n")
                    .replace("\r", "\\r")
                    .replace("\t", "\\t");
+    }
+
+    /**
+     * Safely get the message from a Milvus R response.
+     * The SDK's getMessage() method can throw NullPointerException when the exception field is null
+     * but the status is not Success. This method handles that case safely.
+     */
+    private <T> String getResponseMessage(R<T> response) {
+        if (response == null) {
+            return "null response";
+        }
+        try {
+            // Try to get the message directly
+            return response.getMessage();
+        } catch (NullPointerException e) {
+            // The SDK throws NPE when exception is null - return status description instead
+            if (response.getException() != null) {
+                return response.getException().getMessage();
+            }
+            return "Status code: " + response.getStatus();
+        }
     }
 }
 
