@@ -1,20 +1,16 @@
 name: Daily RepoSync
-
 on:
   schedule:
     # Runs at 8:00 AM UTC every day
     - cron: '0 8 * * *'
   workflow_dispatch:  # Allows manual triggering
-
 jobs:
   sync:
     name: Execute RepoSync with Docker Compose
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
@@ -258,6 +254,19 @@ jobs:
           docker compose logs --tail=30 milvus-service
           echo ""
           
+          # Start a background health monitor to detect container crashes
+          (
+            while true; do
+              sleep 30
+              UNHEALTHY=$(docker compose ps --format json 2>/dev/null | jq -r 'select(.State != "running") | .Name' 2>/dev/null || echo "")
+              if [ -n "$UNHEALTHY" ]; then
+                echo "⚠️ [MONITOR] Unhealthy containers detected: $UNHEALTHY"
+                docker compose ps
+              fi
+            done
+          ) &
+          MONITOR_PID=$!
+          
           # The /api/orchestrator/sync endpoint is synchronous - it returns only when complete
           # Use a longer timeout (20 minutes) to allow the sync to complete with retries
           echo "📡 Starting sync (timeout: 20 minutes)..."
@@ -273,6 +282,9 @@ jobs:
             -o sync-result.json 2>curl-error.txt)
           CURL_EXIT=$?
           
+          # Stop the background monitor
+          kill $MONITOR_PID 2>/dev/null || true
+          
           echo ""
           echo "════════════════════════════════════════════════════════════"
           echo "                     SYNC RESULT SUMMARY"
@@ -280,6 +292,12 @@ jobs:
           echo "Curl exit code: $CURL_EXIT"
           echo "HTTP Response Code: $HTTP_CODE"
           echo ""
+          
+          # Show container status immediately after sync
+          echo "📊 Container status after sync:"
+          docker compose ps
+          echo ""
+          
           echo "Response body:"
           cat sync-result.json 2>/dev/null || echo "No response body"
           echo ""
