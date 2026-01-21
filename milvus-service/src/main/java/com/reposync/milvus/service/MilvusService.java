@@ -73,12 +73,10 @@ public class MilvusService {
                     .withDimension(dimension)
                     .build();
 
-            // Use VarChar for metadata instead of JSON for better compatibility with Zilliz Cloud
-            // Max length 32766 is a safe value for Zilliz Cloud (max is 65535 but some configs have lower limits)
+            // Use JSON for metadata - well supported on Zilliz Cloud
             FieldType metadataField = FieldType.newBuilder()
                     .withName(METADATA_FIELD)
-                    .withDataType(DataType.VarChar)
-                    .withMaxLength(32766)
+                    .withDataType(DataType.JSON)
                     .build();
 
             CreateCollectionParam createCollectionParam = CreateCollectionParam.newBuilder()
