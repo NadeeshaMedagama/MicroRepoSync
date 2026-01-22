@@ -10,9 +10,10 @@ metadata:
   namespace: reposync
 type: Opaque
 stringData:
-  REPOSYNC_GITHUB_TOKEN: ""
-  AZURE_OPENAI_API_KEY: ""
-  MILVUS_TOKEN: ""
+  # Values are substituted from .env file using: ./scripts/deploy-k8s.sh
+  REPOSYNC_GITHUB_TOKEN: "${REPOSYNC_GITHUB_TOKEN}"
+  AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY}"
+  MILVUS_TOKEN: "${MILVUS_TOKEN}"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -20,12 +21,13 @@ metadata:
   name: reposync-config
   namespace: reposync
 data:
-  REPOSYNC_ORGANIZATION: ""
-  REPOSYNC_FILTER_KEYWORD: ""
-  AZURE_OPENAI_ENDPOINT: ""
-  AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: ""
-  MILVUS_URI: ""
-  MILVUS_COLLECTION_NAME: "reposync_collection"
+  # Values are substituted from .env file using: ./scripts/deploy-k8s.sh
+  REPOSYNC_ORGANIZATION: "${REPOSYNC_ORGANIZATION}"
+  REPOSYNC_FILTER_KEYWORD: "${REPOSYNC_FILTER_KEYWORD}"
+  AZURE_OPENAI_ENDPOINT: "${AZURE_OPENAI_ENDPOINT}"
+  AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT: "${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT}"
+  MILVUS_URI: "${MILVUS_URI}"
+  MILVUS_COLLECTION_NAME: "${MILVUS_COLLECTION_NAME}"
   GITHUB_SERVICE_URL: "http://github-service:8081"
   PROCESSOR_SERVICE_URL: "http://document-processor-service:8082"
   EMBEDDING_SERVICE_URL: "http://embedding-service:8083"
